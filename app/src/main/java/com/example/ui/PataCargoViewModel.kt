@@ -17,7 +17,7 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
     val repository = Repository(application)
 
     // Identity Simulation State
-    val selectedUserId = MutableStateFlow("enviador_juan")
+    val selectedUserId = MutableStateFlow(FirebaseAuth.getInstance().currentUser?.uid ?: "")
 
     // Firebase Auth State
     private val _firebaseUser = MutableStateFlow<FirebaseUser?>(null)
@@ -32,6 +32,8 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
                 _firebaseUser.value = user
                 if (user != null) {
                     registerFirebaseUserInRoom(user)
+                } else {
+                    selectedUserId.value = ""
                 }
             }
         } catch (e: Exception) {
@@ -165,8 +167,7 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
         try {
             FirebaseAuth.getInstance().signOut()
             _firebaseUser.value = null
-            // Reset to standard simulated user
-            selectedUserId.value = "enviador_juan"
+            selectedUserId.value = ""
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -337,8 +338,12 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
         val price = repository.calculatePrice(origin, destination, size)
         val insuranceCost = if (insuranceEnabled) repository.calculateInsurance(declaredValue) else 0.0
 
-        val qrCol = "COLLECT-${UUID.randomUUID().toString().take(6).uppercase()}"
-        val qrDel = "DELIVER-${UUID.randomUUID().toString().take(6).uppercase()}"
+        fun generate4LetterCode(): String {
+            val chars = ('A'..'Z').toList()
+            return (1..4).map { chars.random() }.joinToString("")
+        }
+        val qrCol = "COLL-${generate4LetterCode()}"
+        val qrDel = "DELI-${generate4LetterCode()}"
 
         val shipment = ShipmentEntity(
             title = title,
@@ -420,11 +425,17 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun simulateCollectScan(shipmentId: Int, qrCodeContent: String): Boolean {
-        var success = false
+    fun simulateCollectScan(shipmentId: Int, qrCodeContent: String, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
-            val shipment = repository.shipmentDao.getShipmentById(shipmentId) ?: return@launch
-            if (shipment.qrValueCollection == qrCodeContent || qrCodeContent == "SIMULATE-BYPASS") {
+            val shipment = repository.shipmentDao.getShipmentById(shipmentId) ?: run {
+                onComplete(false)
+                return@launch
+            }
+            val match = shipment.qrValueCollection.equals(qrCodeContent, ignoreCase = true) || 
+                        qrCodeContent == "SIMULATE-BYPASS" ||
+                        shipment.qrValueCollection.removePrefix("COLL-").equals(qrCodeContent, ignoreCase = true)
+
+            if (match) {
                 repository.shipmentDao.updateShipmentStatus(shipmentId, "EN_VIAJE")
                 // Seed initial tracking chat message automatically
                 repository.chatMessageDao.insertMessage(
@@ -435,24 +446,32 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
                         message = "El paquete ha sido recolectado correctamente. Ya está EN VIAJE."
                     )
                 )
-                success = true
+                onComplete(true)
+            } else {
+                onComplete(false)
             }
         }
-        return success
     }
 
-    fun simulateDeliveryScan(shipmentId: Int, qrCodeContent: String): Boolean {
-        var success = false
+    fun simulateDeliveryScan(shipmentId: Int, qrCodeContent: String, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
-            val shipment = repository.shipmentDao.getShipmentById(shipmentId) ?: return@launch
-            if (shipment.qrValueDelivery == qrCodeContent || qrCodeContent == "SIMULATE-BYPASS") {
+            val shipment = repository.shipmentDao.getShipmentById(shipmentId) ?: run {
+                onComplete(false)
+                return@launch
+            }
+            val match = shipment.qrValueDelivery.equals(qrCodeContent, ignoreCase = true) || 
+                        qrCodeContent == "SIMULATE-BYPASS" ||
+                        shipment.qrValueDelivery.removePrefix("DELI-").equals(qrCodeContent, ignoreCase = true)
+
+            if (match) {
                 // Set to delivered
                 repository.shipmentDao.updateShipmentStatus(shipmentId, "ENTREGADO")
                 
                 // RELEASE FUNDS:
-                // Under Pata Cargo rules, the carrier receives 100% of their bid amount (shipment.price).
-                // The sender was charged an additional 15% commission on top, which goes to Pata Cargo as a fee.
-                val carrierId = shipment.carrierId ?: return@launch
+                val carrierId = shipment.carrierId ?: run {
+                    onComplete(true)
+                    return@launch
+                }
                 val carrier = repository.userDao.getUserById(carrierId)
                 val ratePaid = shipment.price
                 val commission = ratePaid * 0.15
@@ -476,10 +495,11 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
                         message = "¡Paquete entregado con éxito! Se han liberado $${String.format("%.2f", netPaid)} (100% de la oferta) al portador ${carrier?.name ?: ""}. Pata Cargo retuvo $${String.format("%.2f", commission)} de comisión pagada por el enviador."
                     )
                 )
-                success = true
+                onComplete(true)
+            } else {
+                onComplete(false)
             }
         }
-        return success
     }
 
     fun submitDispute(shipmentId: Int) {
@@ -512,7 +532,7 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
                 repository.shipmentDao.updateShipment(updated)
             } else {
                 // Complete delivery pay
-                simulateDeliveryScan(shipmentId, "SIMULATE-BYPASS")
+                simulateDeliveryScan(shipmentId, "SIMULATE-BYPASS", {})
             }
         }
     }

@@ -212,28 +212,18 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
     var googleSignInErrorSHA1 by remember { mutableStateOf<String?>(null) }
 
     var preferredRoleInState by remember(selectedUserId, firebaseUser) {
-        mutableStateOf(viewModel.getPreferredRole(selectedUserId))
+        mutableStateOf(if (selectedUserId.isNotEmpty()) viewModel.getPreferredRole(selectedUserId) else null)
     }
 
-    val userNeedsRoleChoice = firebaseUser != null && preferredRoleInState == null
+    val userNeedsRoleChoice = firebaseUser != null && selectedUserId.isNotEmpty() && preferredRoleInState == null
 
     // Sync roles when changing simulated or real users
     LaunchedEffect(selectedUserId, firebaseUser) {
-        if (firebaseUser != null) {
+        if (firebaseUser != null && selectedUserId.isNotEmpty()) {
             val savedRole = viewModel.getPreferredRole(selectedUserId)
             preferredRoleInState = savedRole
             if (savedRole != null) {
                 activeRole = savedRole
-            } else {
-                activeRole = "ENVIADOR"
-            }
-        } else {
-            if (selectedUserId == "admin") {
-                activeRole = "ADMIN"
-            } else if (selectedUserId.startsWith("portador")) {
-                activeRole = "PORTADOR"
-            } else {
-                activeRole = "ENVIADOR"
             }
         }
     }
@@ -377,9 +367,10 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Profile Switcher trigger
+                        // Profile Dropdown with Logout option instead of Simulated Selector
+                        var showLogoutMenu by remember { mutableStateOf(false) }
                         IconButton(
-                            onClick = { showProfileSwitcher = true },
+                            onClick = { showLogoutMenu = true },
                             modifier = Modifier.testTag("avatar_button")
                         ) {
                             Box(
@@ -400,6 +391,20 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showLogoutMenu,
+                                onDismissRequest = { showLogoutMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Cerrar Sesión") },
+                                    leadingIcon = { Icon(Icons.Filled.ExitToApp, contentDescription = null, tint = CoralRed) },
+                                    onClick = {
+                                        showLogoutMenu = false
+                                        viewModel.signOutRealUser()
+                                    }
                                 )
                             }
                         }
@@ -479,13 +484,8 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                     }
                 }
 
-                // Warnings or Simulator Hints
-                SimulationIdentityShield(
-                    activeRole = activeRole,
-                    userId = selectedUserId,
-                    userVerified = currentUser?.isVerified == true,
-                    onFixIdentity = { showProfileSwitcher = true }
-                )
+                // Space separator where SimulationIdentityShield used to be
+                Spacer(modifier = Modifier.height(4.dp))
 
                 //--- RENDERING CORE VIEWS BASED ON ROLE ---
                 Box(
@@ -558,22 +558,7 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
 
             //--- POPUP DIALOGS PANEL ---
 
-            // 1. Profile / Simulated User Switcher Dialog
-            if (showProfileSwitcher) {
-                SimulatedIdentitySelectorDialog(
-                    users = users,
-                    selectedUserId = selectedUserId,
-                    viewModel = viewModel,
-                    onSelectUser = { uid ->
-                        viewModel.changeActiveRole(uid)
-                        showProfileSwitcher = false
-                    },
-                    onGoogleSignInError = { sha1 ->
-                        googleSignInErrorSHA1 = sha1
-                    },
-                    onDismiss = { showProfileSwitcher = false }
-                )
-            }
+            // Profile Switcher Dialog removed (simulated identities removed)
 
             // 2. Shipment Detail View with Offers / Collection QR Scanner
             selectedShipmentDetail?.let { shipment ->
@@ -3149,13 +3134,17 @@ fun QRScannerCodeDialog(
     onScanSuccess: () -> Unit
 ) {
     var checkScanCode by remember { mutableStateOf("") }
+    val context = LocalContext.current
     
     // Auto-fill scanner for simple emulator testing in one click
-    var simulatedValue by remember { mutableStateOf("") }
+    var simulatedFullValue by remember { mutableStateOf("") }
+    var simpleWordKey by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         viewModel.repository.shipmentDao.getShipmentById(shipmentId)?.let { s ->
-            simulatedValue = if (scanType == "COLLECT") s.qrValueCollection else s.qrValueDelivery
+            val value = if (scanType == "COLLECT") s.qrValueCollection else s.qrValueDelivery
+            simulatedFullValue = value
+            simpleWordKey = value.removePrefix("COLL-").removePrefix("DELI-")
         }
     }
 
@@ -3163,11 +3152,11 @@ fun QRScannerCodeDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.QrCode, contentDescription = null, tint = PatagonianTeal)
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(Icons.Filled.Security, contentDescription = null, tint = PatagonianTeal)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (scanType == "COLLECT") "Escanear Recolección" else "Escanear Entrega",
-                    fontSize = 15.sp,
+                    text = if (scanType == "COLLECT") "Certificar Entrega en Origen" else "Certificar Recepción en Destino",
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -3175,79 +3164,94 @@ fun QRScannerCodeDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Apunta la cámara del móvil al código QR que muestra tu cliente para certificar el estado y liberar los fondos correspondientes.",
+                    text = "Para seguridad de la comarca, debes verificar la transacción de dos formas posibles:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "1. Escanea el código QR que se visualiza en la pantalla del cliente.\n2. O pídele que te dicte su Palabra Clave de 4 Letras para tipearlo manualmente.",
                     fontSize = 11.sp,
-                    color = Color.Gray
+                    color = Color.DarkGray
                 )
 
                 // Interactive simulated container drawing
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
+                        .height(130.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(LightBackground)
                         .border(1.dp, CardBorderColor, RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        // Drawing generic grid qr representation inside
-                        Icon(Icons.Filled.QrCode, contentDescription = null, tint = Color.Black, modifier = Modifier.size(56.dp))
+                        Icon(Icons.Filled.QrCode, contentDescription = null, tint = PatagonianTeal, modifier = Modifier.size(44.dp))
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("CÓDIGO DE MATCH REQUERIDO:", fontSize = 10.sp, color = Color.Gray)
-                        Text(simulatedValue, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+                        
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("CÓDIGO QR COMPLETO:", fontSize = 8.sp, color = Color.Gray)
+                                Text(simulatedFullValue, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+                            }
+                            
+                            Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.LightGray))
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("PALABRA CLAVE (4 LETRAS):", fontSize = 8.sp, color = Color.Gray)
+                                Text(simpleWordKey, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = SunsetGold)
+                            }
+                        }
                     }
                 }
 
                 OutlinedTextField(
                     value = checkScanCode,
                     onValueChange = { checkScanCode = it },
-                    label = { Text("Escribe o pega el código para simular") },
-                    placeholder = { Text(simulatedValue) },
+                    label = { Text("Palabra clave o código QR") },
+                    placeholder = { Text("Ej: $simpleWordKey") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("scan_input_verify"),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     singleLine = true
                 )
 
                 Button(
                     onClick = {
-                        // Simulating direct tap bypass on emulator
-                        checkScanCode = simulatedValue
+                        checkScanCode = simpleWordKey
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TealLight, contentColor = PatagonianTeal),
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Auto-completar simulador de QR ✨", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Auto-completar palabra clave ✨ (Simular)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val result = if (scanType == "COLLECT") {
-                        viewModel.simulateCollectScan(shipmentId, checkScanCode)
-                    } else {
-                        viewModel.simulateDeliveryScan(shipmentId, checkScanCode)
+                    if (checkScanCode.isBlank()) {
+                        Toast.makeText(context, "Por favor ingresa un código o palabra clave", Toast.LENGTH_SHORT).show()
+                        return@Button
                     }
-                    if (result) {
-                        onScanSuccess()
-                    } else {
-                        // Accept bypass for easier user click test flow
-                        if (scanType == "COLLECT") {
-                            viewModel.simulateCollectScan(shipmentId, "SIMULATE-BYPASS")
+                    val onCompleteCallback: (Boolean) -> Unit = { isSuccess ->
+                        if (isSuccess) {
+                            onScanSuccess()
                         } else {
-                            viewModel.simulateDeliveryScan(shipmentId, "SIMULATE-BYPASS")
+                            Toast.makeText(context, "Código inválido. Por favor intenta de nuevo.", Toast.LENGTH_LONG).show()
                         }
-                        onScanSuccess()
+                    }
+                    if (scanType == "COLLECT") {
+                        viewModel.simulateCollectScan(shipmentId, checkScanCode.trim(), onCompleteCallback)
+                    } else {
+                        viewModel.simulateDeliveryScan(shipmentId, checkScanCode.trim(), onCompleteCallback)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Validar Escaneo ✓", fontWeight = FontWeight.Bold)
+                Text("Validar Entrega ✓", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

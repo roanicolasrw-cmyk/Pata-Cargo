@@ -246,8 +246,8 @@ class Repository(private val context: Context) {
                 insuranceCost = calculateInsurance(120000.0),
                 senderId = "enviador_distribuidora",
                 carrierId = null,
-                qrValueCollection = "COLLECT-${UUID.randomUUID().toString().take(6).uppercase()}",
-                qrValueDelivery = "DELIVER-${UUID.randomUUID().toString().take(6).uppercase()}",
+                qrValueCollection = "COLL-BOMB",
+                qrValueDelivery = "DELI-AGRI",
                 status = "PENDIENTE"
             ),
             ShipmentEntity(
@@ -264,8 +264,8 @@ class Repository(private val context: Context) {
                 insuranceCost = 0.0,
                 senderId = "enviador_juan",
                 carrierId = null,
-                qrValueCollection = "COLLECT-${UUID.randomUUID().toString().take(6).uppercase()}",
-                qrValueDelivery = "DELIVER-${UUID.randomUUID().toString().take(6).uppercase()}",
+                qrValueCollection = "COLL-ALFA",
+                qrValueDelivery = "DELI-GALE",
                 status = "PENDIENTE"
             ),
             ShipmentEntity(
@@ -282,8 +282,8 @@ class Repository(private val context: Context) {
                 insuranceCost = calculateInsurance(85000.0),
                 senderId = "enviador_distribuidora",
                 carrierId = "portador_sofia",
-                qrValueCollection = "COLLECT-READY",
-                qrValueDelivery = "DELIVER-REMAIN",
+                qrValueCollection = "COLL-OPTI",
+                qrValueDelivery = "DELI-LENS",
                 status = "EN_VIAJE"
             ),
             ShipmentEntity(
@@ -300,8 +300,8 @@ class Repository(private val context: Context) {
                 insuranceCost = 0.0,
                 senderId = "enviador_juan",
                 carrierId = "portador_sofia",
-                qrValueCollection = "COLLECT-DONE",
-                qrValueDelivery = "DELIVER-DONE",
+                qrValueCollection = "COLL-ROPA",
+                qrValueDelivery = "DELI-LANA",
                 status = "ENTREGADO"
             )
         )
