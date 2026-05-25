@@ -39,23 +39,102 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun getPreferredRole(userId: String): String? {
+        val prefs = getApplication<Application>().getSharedPreferences("patacargo_prefs", android.content.Context.MODE_PRIVATE)
+        return prefs.getString("preferred_role_$userId", null)
+    }
+
+    fun setPreferredRole(userId: String, role: String) {
+        val prefs = getApplication<Application>().getSharedPreferences("patacargo_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("preferred_role_$userId", role).apply()
+    }
+
     private fun registerFirebaseUserInRoom(user: FirebaseUser) {
         viewModelScope.launch {
             val existingUser = repository.userDao.getUserById(user.uid)
             if (existingUser == null) {
                 val newUser = UserEntity(
                     id = user.uid,
-                    name = user.displayName ?: user.email?.substringBefore("@") ?: "Usuario Google",
+                    name = user.displayName ?: user.email?.substringBefore("@") ?: "Usuario Real",
                     dni = "",
                     rating = 5.0f,
-                    isVerified = true, // Google accounts are auto-verified
+                    isVerified = true, // Real accounts are auto-verified
                     isBiometricVerified = true,
-                    walletBalance = 75000.0, // Seed real Google account with simulated wallet balance
+                    walletBalance = 75000.0, // Seed real account with simulated wallet balance
                     registrationSelfie = null
                 )
                 repository.userDao.insertUser(newUser)
             }
             selectedUserId.value = user.uid
+        }
+    }
+
+    fun signUpWithEmail(
+        emailAddress: String,
+        passwordText: String,
+        fullName: String,
+        dniText: String,
+        roleChosen: String,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        try {
+            FirebaseAuth.getInstance().createUserWithEmailAndPassword(emailAddress, passwordText)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val user = task.result?.user
+                        if (user != null) {
+                            setPreferredRole(user.uid, roleChosen)
+                            viewModelScope.launch {
+                                val newUser = UserEntity(
+                                    id = user.uid,
+                                    name = fullName.ifEmpty { user.email?.substringBefore("@") ?: "Usuario Real" },
+                                    dni = dniText,
+                                    rating = 5.0f,
+                                    isVerified = true,
+                                    isBiometricVerified = true,
+                                    walletBalance = 75000.0,
+                                    registrationSelfie = null
+                                )
+                                repository.userDao.insertUser(newUser)
+                                _firebaseUser.value = user
+                                selectedUserId.value = user.uid
+                                onComplete(true, null)
+                            }
+                        } else {
+                            onComplete(false, "No se pudo crear el usuario en Firebase")
+                        }
+                    } else {
+                        onComplete(false, task.exception?.localizedMessage ?: "Error de creación de cuenta")
+                    }
+                }
+        } catch (e: Exception) {
+            onComplete(false, e.localizedMessage ?: "Excepción inesperada")
+        }
+    }
+
+    fun signInWithEmail(
+        emailAddress: String,
+        passwordText: String,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        try {
+            FirebaseAuth.getInstance().signInWithEmailAndPassword(emailAddress, passwordText)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val user = task.result?.user
+                        if (user != null) {
+                            _firebaseUser.value = user
+                            registerFirebaseUserInRoom(user)
+                            onComplete(true, null)
+                        } else {
+                            onComplete(false, "No se encontró el usuario en Firebase")
+                        }
+                    } else {
+                        onComplete(false, task.exception?.localizedMessage ?: "Error de credenciales")
+                    }
+                }
+        } catch (e: Exception) {
+            onComplete(false, e.localizedMessage ?: "Excepción inesperada")
         }
     }
 

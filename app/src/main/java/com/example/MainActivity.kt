@@ -202,344 +202,434 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
     // Biometric Scanner selfie checks state
     val carrierUnderSelfieVerification by viewModel.carrierUnderSelfieVerification.collectAsStateWithLifecycle()
 
-    // Sync roles when changing simulated users so it represents their matching features
-    LaunchedEffect(selectedUserId) {
-        if (selectedUserId == "admin") {
-            activeRole = "ADMIN"
-        } else if (selectedUserId.startsWith("portador")) {
-            activeRole = "PORTADOR"
+    val firebaseUser by viewModel.firebaseUser.collectAsStateWithLifecycle()
+    var isSimulationBypass by remember { mutableStateOf(false) }
+
+    val userNeedsRoleChoice = firebaseUser != null && viewModel.getPreferredRole(selectedUserId) == null
+
+    // Sync roles when changing simulated or real users
+    LaunchedEffect(selectedUserId, firebaseUser) {
+        if (firebaseUser != null) {
+            val savedRole = viewModel.getPreferredRole(selectedUserId)
+            if (savedRole != null) {
+                activeRole = savedRole
+            } else {
+                activeRole = "ENVIADOR"
+            }
         } else {
-            activeRole = "ENVIADOR"
+            if (selectedUserId == "admin") {
+                activeRole = "ADMIN"
+            } else if (selectedUserId.startsWith("portador")) {
+                activeRole = "PORTADOR"
+            } else {
+                activeRole = "ENVIADOR"
+            }
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            //--- BRANDED TOP LOGISTICS ROW & SIMULATOR CHEATS BAR ---
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        PataCargoVectorLogo(modifier = Modifier.size(38.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "PATA CARGO",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                text = "VIRCH & Madryn Colaborativo",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
+    if (firebaseUser == null && !isSimulationBypass) {
+        // Reusable google sign in configuration inside Onboarding screen
+        val googleLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                val idToken = account?.idToken
+                if (idToken != null) {
+                    viewModel.signInWithGoogleToken(idToken) { success, errorMsg ->
+                        if (success) {
+                            Toast.makeText(context, "¡Sesión iniciada correctamente con Google!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Error: ${errorMsg ?: "Error de vinculación"}", Toast.LENGTH_LONG).show()
                         }
                     }
-                },
-                actions = {
-                    // Wallet Balance indicator
-                    currentUser?.let { user ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(TealLight)
-                                .border(1.dp, PatagonianTeal.copy(0.3f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AccountBalance,
-                                contentDescription = "Billetera",
-                                tint = PatagonianTeal,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "$${String.format("%,.2f", user.walletBalance)}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PatagonianTeal
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Profile Switcher trigger
-                    IconButton(
-                        onClick = { showProfileSwitcher = true },
-                        modifier = Modifier.testTag("avatar_button")
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when (activeRole) {
-                                        "ENVIADOR" -> SunsetGold
-                                        "PORTADOR" -> PatagonianTeal
-                                        else -> ValleyGreen
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = currentUser?.name?.take(2)?.uppercase() ?: "US",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
+                } else {
+                    Toast.makeText(context, "No se recibió un Token de ID válido de Google.", Toast.LENGTH_LONG).show()
                 }
-            )
+            } catch (e: ApiException) {
+                val statusMessage = when (e.statusCode) {
+                    12500 -> "Google Play Services no está configurado en el dispositivo"
+                    7 -> "Error de conexión de red"
+                    else -> "Código de de error: ${e.statusCode}"
+                }
+                Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Fallo al iniciar sesión: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+        }
 
-            //--- ROLE INTERACTIVE BAR CHIPS ---
-            Surface(
-                tonalElevation = 2.dp,
-                shadowElevation = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(0.4f)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+        fun triggerOnboardingGoogleSignIn() {
+            try {
+                val webClientId = try {
+                    context.getString(
+                        context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                    ).ifEmpty { "14033808612-6i5qspi0cbve77c7q2up08ji37nicq70.apps.googleusercontent.com" }
+                } catch (e: Exception) {
+                    "14033808612-6i5qspi0cbve77c7q2up08ji37nicq70.apps.googleusercontent.com"
+                }
+
+                val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestIdToken(webClientId)
+                    .requestEmail()
+                    .build()
+
+                val googleSignInClient = GoogleSignIn.getClient(context, gso)
+                googleSignInClient.signOut().addOnCompleteListener {
+                    val signInIntent = googleSignInClient.signInIntent
+                    googleLauncher.launch(signInIntent)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error al preparar Google Sign-In: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        OnboardingAuthScreen(
+            viewModel = viewModel,
+            onBypassClicked = { isSimulationBypass = true },
+            onGoogleSignInIntent = { triggerOnboardingGoogleSignIn() }
+        )
+    } else if (userNeedsRoleChoice) {
+        UserRoleSelectionScreen(
+            onRoleSelected = { chosenRole ->
+                viewModel.setPreferredRole(selectedUserId, chosenRole)
+                activeRole = chosenRole
+            }
+        )
+    } else {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                //--- BRANDED TOP LOGISTICS ROW & SIMULATOR CHEATS BAR ---
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            PataCargoVectorLogo(modifier = Modifier.size(38.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "PATA CARGO",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = "VIRCH & Madryn Colaborativo",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        // Wallet Balance indicator
+                        currentUser?.let { user ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(TealLight)
+                                    .border(1.dp, PatagonianTeal.copy(0.3f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AccountBalance,
+                                    contentDescription = "Billetera",
+                                    tint = PatagonianTeal,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "$${String.format("%,.2f", user.walletBalance)}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PatagonianTeal
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Profile Switcher trigger
+                        IconButton(
+                            onClick = { showProfileSwitcher = true },
+                            modifier = Modifier.testTag("avatar_button")
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when (activeRole) {
+                                            "ENVIADOR" -> SunsetGold
+                                            "PORTADOR" -> PatagonianTeal
+                                            else -> ValleyGreen
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = currentUser?.name?.take(2)?.uppercase() ?: "US",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                )
+
+                //--- ROLE INTERACTIVE BAR CHIPS ---
+                Surface(
+                    tonalElevation = 2.dp,
+                    shadowElevation = 1.dp,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(0.4f)
                 ) {
-                    val roles = listOf(
-                        Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
-                        Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga"),
-                        Triple("ADMIN", Icons.Filled.Security, "Panel Admin")
-                    )
-                    
-                    roles.forEach { (role, icon, title) ->
-                        val isSelected = activeRole == role
-                        val isSimulatedRoleMatch = when (role) {
-                            "ADMIN" -> selectedUserId == "admin"
-                            "PORTADOR" -> selectedUserId.startsWith("portador")
-                            else -> selectedUserId.startsWith("enviador")
-                        }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val roles = listOf(
+                            Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
+                            Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga"),
+                            Triple("ADMIN", Icons.Filled.Security, "Panel Admin")
+                        )
+                        
+                        roles.forEach { (role, icon, title) ->
+                            val isSelected = activeRole == role
+                            val isSimulatedRoleMatch = when (role) {
+                                "ADMIN" -> selectedUserId == "admin"
+                                "PORTADOR" -> selectedUserId.startsWith("portador")
+                                else -> selectedUserId.startsWith("enviador")
+                            }
 
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { activeRole = role },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = title,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = title,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
-                                    )
-                                }
-                            },
-                            colors = FilterChipDefaults.filterChipColors()
-                                .copy(
-                                    selectedContainerColor = if (isSimulatedRoleMatch) PatagonianTeal else SlateGrey,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    labelColor = MaterialTheme.colorScheme.onSurface
-                                ),
-                            border = FilterChipDefaults.filterChipBorder(
+                            FilterChip(
                                 selected = isSelected,
-                                enabled = true,
-                                borderColor = if (isSimulatedRoleMatch) SunsetGold else CardBorderColor,
-                                selectedBorderColor = if (isSimulatedRoleMatch) SunsetGold else PatagonianTeal,
-                                disabledBorderColor = CardBorderColor
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("role_chip_$role")
-                        )
+                                onClick = { 
+                                    activeRole = role
+                                    if (firebaseUser != null) {
+                                        viewModel.setPreferredRole(selectedUserId, role)
+                                    }
+                                },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = title,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = title,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                                        )
+                                    }
+                                },
+                                colors = FilterChipDefaults.filterChipColors()
+                                    .copy(
+                                        selectedContainerColor = if (isSimulatedRoleMatch) PatagonianTeal else SlateGrey,
+                                        selectedLabelColor = Color.White,
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                        labelColor = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    selected = isSelected,
+                                    enabled = true,
+                                    borderColor = if (isSimulatedRoleMatch) SunsetGold else CardBorderColor,
+                                    selectedBorderColor = if (isSimulatedRoleMatch) SunsetGold else PatagonianTeal,
+                                    disabledBorderColor = CardBorderColor
+                                ),
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("role_chip_$role")
+                            )
+                        }
+                    }
+                }
+
+                // Warnings or Simulator Hints
+                SimulationIdentityShield(
+                    activeRole = activeRole,
+                    userId = selectedUserId,
+                    userVerified = currentUser?.isVerified == true,
+                    onFixIdentity = { showProfileSwitcher = true }
+                )
+
+                //--- RENDERING CORE VIEWS BASED ON ROLE ---
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    when (activeRole) {
+                        "ENVIADOR" -> {
+                            SenderSectionLayout(
+                                viewModel = viewModel,
+                                currentTab = senderTab,
+                                onTabSelected = { senderTab = it },
+                                onItemClicked = { shipmentId ->
+                                    viewModel.selectedShipmentIdDetail.value = shipmentId
+                                },
+                                onChatClicked = { shipmentId ->
+                                    viewModel.setActiveChatShipmentId(shipmentId)
+                                }
+                            )
+                        }
+                        "PORTADOR" -> {
+                            CarrierSectionLayout(
+                                viewModel = viewModel,
+                                currentTab = carrierTab,
+                                onTabSelected = { carrierTab = it },
+                                onPlaceOfferClicked = { shipment ->
+                                    showBidDialogShipment = shipment
+                                },
+                                onScanCollection = { sId ->
+                                    activeScanShipmentId = sId
+                                    activeScanType = "COLLECT"
+                                    showScanDialog = true
+                                },
+                                onScanDelivery = { sId ->
+                                    activeScanShipmentId = sId
+                                    activeScanType = "DELIVER"
+                                    showScanDialog = true
+                                },
+                                onChatClicked = { shipmentId ->
+                                    viewModel.setActiveChatShipmentId(shipmentId)
+                                }
+                            )
+                        }
+                        else -> {
+                            AdminSectionLayout(
+                                viewModel = viewModel,
+                                currentTab = adminTab,
+                                onTabSelected = { adminTab = it },
+                                onApproveVerify = { carrierId ->
+                                    viewModel.adminApproveCarrier(carrierId)
+                                    Toast.makeText(context, "Portador aprobado con éxito", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
                     }
                 }
             }
 
-            // Warnings or Simulator Hints
-            SimulationIdentityShield(
-                activeRole = activeRole,
-                userId = selectedUserId,
-                userVerified = currentUser?.isVerified == true,
-                onFixIdentity = { showProfileSwitcher = true }
-            )
-
-            //--- RENDERING CORE VIEWS BASED ON ROLE ---
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                when (activeRole) {
-                    "ENVIADOR" -> {
-                        SenderSectionLayout(
-                            viewModel = viewModel,
-                            currentTab = senderTab,
-                            onTabSelected = { senderTab = it },
-                            onItemClicked = { shipmentId ->
-                                viewModel.selectedShipmentIdDetail.value = shipmentId
-                            },
-                            onChatClicked = { shipmentId ->
-                                viewModel.setActiveChatShipmentId(shipmentId)
-                            }
-                        )
+            //--- FLOATING IDENTITY SCANNER SIMULATION PANEL (SELFIES) ---
+            carrierUnderSelfieVerification?.let { user ->
+                BiometricScanningSimulator(
+                    user = user,
+                    onScanComplete = { isSuccess ->
+                        viewModel.completeBiometricSelfieCheck(isSuccess)
+                        Toast.makeText(context, if (isSuccess) "Selfie validada. Pendiente de aprobación administrativa!" else "Fallo al validar selfie biométrica.", Toast.LENGTH_LONG).show()
                     }
-                    "PORTADOR" -> {
-                        CarrierSectionLayout(
-                            viewModel = viewModel,
-                            currentTab = carrierTab,
-                            onTabSelected = { carrierTab = it },
-                            onPlaceOfferClicked = { shipment ->
-                                showBidDialogShipment = shipment
-                            },
-                            onScanCollection = { sId ->
-                                activeScanShipmentId = sId
-                                activeScanType = "COLLECT"
-                                showScanDialog = true
-                            },
-                            onScanDelivery = { sId ->
-                                activeScanShipmentId = sId
-                                activeScanType = "DELIVER"
-                                showScanDialog = true
-                            },
-                            onChatClicked = { shipmentId ->
-                                viewModel.setActiveChatShipmentId(shipmentId)
-                            }
-                        )
-                    }
-                    else -> {
-                        AdminSectionLayout(
-                            viewModel = viewModel,
-                            currentTab = adminTab,
-                            onTabSelected = { adminTab = it },
-                            onApproveVerify = { carrierId ->
-                                viewModel.adminApproveCarrier(carrierId)
-                                Toast.makeText(context, "Portador aprobado con éxito", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    }
-                }
+                )
             }
-        }
 
-        //--- FLOATING IDENTITY SCANNER SIMULATION PANEL (SELFIES) ---
-        carrierUnderSelfieVerification?.let { user ->
-            BiometricScanningSimulator(
-                user = user,
-                onScanComplete = { isSuccess ->
-                    viewModel.completeBiometricSelfieCheck(isSuccess)
-                    Toast.makeText(context, if (isSuccess) "Selfie validada. Pendiente de aprobación administrativa!" else "Fallo al validar selfie biométrica.", Toast.LENGTH_LONG).show()
-                }
-            )
-        }
+            //--- POPUP DIALOGS PANEL ---
 
-        //--- POPUP DIALOGS PANEL ---
+            // 1. Profile / Simulated User Switcher Dialog
+            if (showProfileSwitcher) {
+                SimulatedIdentitySelectorDialog(
+                    users = users,
+                    selectedUserId = selectedUserId,
+                    viewModel = viewModel,
+                    onSelectUser = { uid ->
+                        viewModel.changeActiveRole(uid)
+                        showProfileSwitcher = false
+                    },
+                    onDismiss = { showProfileSwitcher = false }
+                )
+            }
 
-        // 1. Profile / Simulated User Switcher Dialog
-        if (showProfileSwitcher) {
-            SimulatedIdentitySelectorDialog(
-                users = users,
-                selectedUserId = selectedUserId,
-                viewModel = viewModel,
-                onSelectUser = { uid ->
-                    viewModel.changeActiveRole(uid)
-                    showProfileSwitcher = false
-                },
-                onDismiss = { showProfileSwitcher = false }
-            )
-        }
+            // 2. Shipment Detail View with Offers / Collection QR Scanner
+            selectedShipmentDetail?.let { shipment ->
+                ShipmentDetailAndOfferDialog(
+                    shipment = shipment,
+                    offers = selectedShipmentOffers,
+                    currentUserId = selectedUserId,
+                    onAcceptOffer = { offer ->
+                        viewModel.acceptOffer(shipment.id, offer)
+                        viewModel.selectedShipmentIdDetail.value = null
+                        scope.launch {
+                            Toast.makeText(context, "Oferta aceptada. El costo ha sido colocado en garantía (Escrow)!", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    onSubmitDispute = {
+                        viewModel.submitDispute(shipment.id)
+                        viewModel.selectedShipmentIdDetail.value = null
+                        Toast.makeText(context, "Se abrió una disputa comercial por esta carga.", Toast.LENGTH_SHORT).show()
+                    },
+                    onRateCarrier = { rating, comment ->
+                        viewModel.submitReview(
+                            shipmentId = shipment.id,
+                            rating = rating,
+                            comment = comment,
+                            writerId = shipment.senderId,
+                            targetId = shipment.carrierId ?: ""
+                        )
+                        viewModel.selectedShipmentIdDetail.value = null
+                        Toast.makeText(context, "Reseña registrada con éxito!", Toast.LENGTH_SHORT).show()
+                    },
+                    onDismiss = { viewModel.selectedShipmentIdDetail.value = null }
+                )
+            }
 
-        // 2. Shipment Detail View with Offers / Collection QR Scanner
-        selectedShipmentDetail?.let { shipment ->
-            ShipmentDetailAndOfferDialog(
-                shipment = shipment,
-                offers = selectedShipmentOffers,
-                currentUserId = selectedUserId,
-                onAcceptOffer = { offer ->
-                    viewModel.acceptOffer(shipment.id, offer)
-                    viewModel.selectedShipmentIdDetail.value = null
-                    scope.launch {
-                        Toast.makeText(context, "Oferta aceptada. El costo ha sido colocado en garantía (Escrow)!", Toast.LENGTH_LONG).show()
+            // 3. Easy QR scan bypass controller
+            if (showScanDialog && activeScanShipmentId != null && activeScanType != null) {
+                QRScannerCodeDialog(
+                    shipmentId = activeScanShipmentId!!,
+                    scanType = activeScanType!!,
+                    viewModel = viewModel,
+                    onDismiss = {
+                        showScanDialog = false
+                        activeScanShipmentId = null
+                        activeScanType = null
+                    },
+                    onScanSuccess = {
+                        showScanDialog = false
+                        activeScanShipmentId = null
+                        activeScanType = null
+                        Toast.makeText(context, "¡Escaneo exitoso! Estado de carga actualizado.", Toast.LENGTH_LONG).show()
                     }
-                },
-                onSubmitDispute = {
-                    viewModel.submitDispute(shipment.id)
-                    viewModel.selectedShipmentIdDetail.value = null
-                    Toast.makeText(context, "Se abrió una disputa comercial por esta carga.", Toast.LENGTH_SHORT).show()
-                },
-                onRateCarrier = { rating, comment ->
-                    viewModel.submitReview(
-                        shipmentId = shipment.id,
-                        rating = rating,
-                        comment = comment,
-                        writerId = shipment.senderId,
-                        targetId = shipment.carrierId ?: ""
-                    )
-                    viewModel.selectedShipmentIdDetail.value = null
-                    Toast.makeText(context, "Reseña registrada con éxito!", Toast.LENGTH_SHORT).show()
-                },
-                onDismiss = { viewModel.selectedShipmentIdDetail.value = null }
-            )
-        }
+                )
+            }
 
-        // 3. Easy QR scan bypass controller
-        if (showScanDialog && activeScanShipmentId != null && activeScanType != null) {
-            QRScannerCodeDialog(
-                shipmentId = activeScanShipmentId!!,
-                scanType = activeScanType!!,
-                viewModel = viewModel,
-                onDismiss = {
-                    showScanDialog = false
-                    activeScanShipmentId = null
-                    activeScanType = null
-                },
-                onScanSuccess = {
-                    showScanDialog = false
-                    activeScanShipmentId = null
-                    activeScanType = null
-                    Toast.makeText(context, "¡Escaneo exitoso! Estado de carga actualizado.", Toast.LENGTH_LONG).show()
-                }
-            )
-        }
+            // 4. Carrier Bid Creator Dialog
+            showBidDialogShipment?.let { s ->
+                MakeCarrierOfferDialog(
+                    shipment = s,
+                    suggestedBasePrice = s.price,
+                    onSendOffer = { bidPrice, comment ->
+                        viewModel.makeOffer(s.id, bidPrice, comment)
+                        showBidDialogShipment = null
+                        Toast.makeText(context, "Oferta de transporte enviada!", Toast.LENGTH_SHORT).show()
+                    },
+                    onDismiss = { showBidDialogShipment = null }
+                )
+            }
 
-        // 4. Carrier Bid Creator Dialog
-        showBidDialogShipment?.let { s ->
-            MakeCarrierOfferDialog(
-                shipment = s,
-                suggestedBasePrice = s.price,
-                onSendOffer = { bidPrice, comment ->
-                    viewModel.makeOffer(s.id, bidPrice, comment)
-                    showBidDialogShipment = null
-                    Toast.makeText(context, "Oferta de transporte enviada!", Toast.LENGTH_SHORT).show()
-                },
-                onDismiss = { showBidDialogShipment = null }
-            )
-        }
-
-        // 5. Active Chat Dialog
-        chatShipmentDetails?.let { s ->
-            ActiveChatDialog(
-                shipment = s,
-                currentUserId = selectedUserId,
-                currentUserName = currentUser?.name ?: "Usuario",
-                messages = chatMessages,
-                onSend = { text -> viewModel.sendMessage(s.id, text) },
-                onDismiss = { viewModel.setActiveChatShipmentId(null) }
-            )
+            // 5. Active Chat Dialog
+            chatShipmentDetails?.let { s ->
+                ActiveChatDialog(
+                    shipment = s,
+                    currentUserId = selectedUserId,
+                    currentUserName = currentUser?.name ?: "Usuario",
+                    messages = chatMessages,
+                    onSend = { text -> viewModel.sendMessage(s.id, text) },
+                    onDismiss = { viewModel.setActiveChatShipmentId(null) }
+                )
+            }
         }
     }
 }
@@ -3296,4 +3386,518 @@ fun ShipmentDetailAndOfferDialog(
             }
         }
     )
+}
+
+@Composable
+fun OnboardingAuthScreen(
+    viewModel: PataCargoViewModel,
+    onBypassClicked: () -> Unit,
+    onGoogleSignInIntent: () -> Unit
+) {
+    var isSignUpMode by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // Inputs
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var fullName by remember { mutableStateOf("") }
+    var dni by remember { mutableStateOf("") }
+    var selectedRole by remember { mutableStateOf("ENVIADOR") } // "ENVIADOR" or "PORTADOR"
+    var loading by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(DarkBackground, PatagonianTeal)
+                )
+            )
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Spacer(modifier = Modifier.height(20.dp))
+            PataCargoVectorLogo(modifier = Modifier.size(100.dp))
+            
+            Text(
+                text = "PATA CARGO",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
+                    letterSpacing = 2.sp
+                )
+            )
+            
+            Text(
+                text = "Envíos Colaborativos Virch & Madryn",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Medium
+                ),
+                textAlign = TextAlign.Center
+            )
+
+            HorizontalDivider(
+                color = Color.White.copy(alpha = 0.15f),
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+
+            // Auth Fields Container
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = LightSurface),
+                border = BorderStroke(1.dp, CardBorderColor),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Sign In vs Sign Up tabs
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(LightBackground)
+                            .padding(4.dp)
+                    ) {
+                        Button(
+                            onClick = { isSignUpMode = false },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (!isSignUpMode) PatagonianTeal else Color.Transparent,
+                                contentColor = if (!isSignUpMode) Color.White else Color.Gray
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(vertical = 10.dp)
+                        ) {
+                            Text("Iniciar Sesión", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { isSignUpMode = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSignUpMode) PatagonianTeal else Color.Transparent,
+                                contentColor = if (isSignUpMode) Color.White else Color.Gray
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(vertical = 10.dp)
+                        ) {
+                            Text("Crear Cuenta", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = if (isSignUpMode) "Regístrate de manera oficial" else "Ingresa a tu cuenta",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PatagonianTeal
+                    )
+
+                    if (isSignUpMode) {
+                        OutlinedTextField(
+                            value = fullName,
+                            onValueChange = { fullName = it },
+                            label = { Text("Nombre Completo") },
+                            placeholder = { Text("Ej: María Gales") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = dni,
+                            onValueChange = { dni = it },
+                            label = { Text("DNI o CUIT") },
+                            placeholder = { Text("Ej: 37.562.901") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Correo Electrónico") },
+                        placeholder = { Text("ejemplo@patacargo.com") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Contraseña") },
+                        placeholder = { Text("Mínimo 6 caracteres") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isSignUpMode) {
+                        Text(
+                            text = "¿Cuál será tu actividad principal?",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PatagonianTeal,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { selectedRole = "ENVIADOR" }
+                                    .border(
+                                        1.dp,
+                                        if (selectedRole == "ENVIADOR") PatagonianTeal else CardBorderColor,
+                                        RoundedCornerShape(10.dp)
+                                    ),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (selectedRole == "ENVIADOR") TealLight else Color.White
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AddBox,
+                                        contentDescription = null,
+                                        tint = if (selectedRole == "ENVIADOR") PatagonianTeal else Color.Gray,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "Enviador",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (selectedRole == "ENVIADOR") PatagonianTeal else Color.Gray
+                                    )
+                                    Text(
+                                        "Quiero enviar",
+                                        fontSize = 9.sp,
+                                        color = Color.Gray,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { selectedRole = "PORTADOR" }
+                                    .border(
+                                        1.dp,
+                                        if (selectedRole == "PORTADOR") PatagonianTeal else CardBorderColor,
+                                        RoundedCornerShape(10.dp)
+                                    ),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (selectedRole == "PORTADOR") TealLight else Color.White
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.LocalShipping,
+                                        contentDescription = null,
+                                        tint = if (selectedRole == "PORTADOR") PatagonianTeal else Color.Gray,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "Portador",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (selectedRole == "PORTADOR") PatagonianTeal else Color.Gray
+                                    )
+                                    Text(
+                                        "Quiero llevar",
+                                        fontSize = 9.sp,
+                                        color = Color.Gray,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (loading) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = PatagonianTeal)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                if (email.isBlank() || password.isBlank()) {
+                                    Toast.makeText(context, "Por favor completa todos los campos", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                if (isSignUpMode && fullName.isBlank()) {
+                                    Toast.makeText(context, "Por favor ingresa tu nombre", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                loading = true
+                                if (isSignUpMode) {
+                                    viewModel.signUpWithEmail(
+                                        emailAddress = email.trim(),
+                                        passwordText = password.trim(),
+                                        fullName = fullName.trim(),
+                                        dniText = dni.trim(),
+                                        roleChosen = selectedRole,
+                                        onComplete = { success, errorMsg ->
+                                            loading = false
+                                            if (success) {
+                                                Toast.makeText(context, "¡Cuenta creada con éxito!", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    viewModel.signInWithEmail(
+                                        emailAddress = email.trim(),
+                                        passwordText = password.trim(),
+                                        onComplete = { success, errorMsg ->
+                                            loading = false
+                                            if (success) {
+                                                Toast.makeText(context, "¡Sesión iniciada correctamente!", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                        ) {
+                            Text(
+                                text = if (isSignUpMode) "Crear Mi Cuenta" else "Iniciar Sesión Segura",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color.LightGray)
+                        Text("   O   ", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color.LightGray)
+                    }
+
+                    OutlinedButton(
+                        onClick = onGoogleSignInIntent,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.DarkGray),
+                        border = BorderStroke(1.dp, Color.LightGray),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Fingerprint,
+                            contentDescription = "Google",
+                            tint = SunsetGold,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Ingresar de forma rápida con Google", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            TextButton(onClick = onBypassClicked) {
+                Text(
+                    text = "⚙️ Entrar en modo simulación de prueba (Modo Demo)",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+                )
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+fun UserRoleSelectionScreen(
+    onRoleSelected: (String) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(DarkBackground, PatagonianTeal)
+                )
+            )
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+        ) {
+            PataCargoVectorLogo(modifier = Modifier.size(80.dp))
+
+            Text(
+                text = "¡BIENVENIDO A PATA CARGO!",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                letterSpacing = 1.sp
+            )
+
+            Text(
+                text = "Para brindarte la mejor experiencia colaborativa en la comarca del VIRCH y Madryn, elige tu actividad de inicio:",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.8f),
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(horizontal = 10.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Option 1: Sender (Enviador)
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = LightSurface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onRoleSelected("ENVIADOR") }
+                    .border(2.dp, SunsetGold, RoundedCornerShape(16.dp))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(SunsetGold.copy(0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AddBox,
+                            contentDescription = "Enviar",
+                            tint = SunsetGold,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Quiero Enviar Paquetes (Enviador)",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PatagonianTeal
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "Publica tus envíos o mercaderías, recibe ofertas económicas de viajeros de confianza y coordina retiros.",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            }
+
+            // Option 2: Carrier (Portador)
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = LightSurface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onRoleSelected("PORTADOR") }
+                    .border(2.dp, PatagonianTeal, RoundedCornerShape(16.dp))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(PatagonianTeal.copy(0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocalShipping,
+                            contentDescription = "Llevar",
+                            tint = PatagonianTeal,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Quiero Llevar Paquetes (Portador)",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PatagonianTeal
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "Configura tus rutas habituales de viaje por la comarca, propón cotizaciones de envío y genera ingresos extras.",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = "Podrás cambiar de actividad o interactuar con ambas de forma simultánea desde el panel superior del menú en cualquier momento.",
+                fontSize = 10.sp,
+                color = Color.White.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+        }
+    }
 }
