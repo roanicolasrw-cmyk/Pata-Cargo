@@ -57,7 +57,8 @@ import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
+fun PataCargoVectorLogo(modifier: Modifier = Modifier, isDarkTheme: Boolean = false) {
+    val tintColor = if (isDarkTheme) Color.White else PatagonianTeal
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center
@@ -65,9 +66,9 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
         // Draw the circular boundary outlines as seen in the logo
         Canvas(modifier = Modifier.fillMaxSize()) {
             val stroke = size.minDimension * 0.045f // Proportional line weight
-            // Outer Navy Blue arc
+            // Outer Navy/White arc
             drawArc(
-                color = PatagonianTeal,
+                color = tintColor,
                 startAngle = 100f,
                 sweepAngle = 260f,
                 useCenter = false,
@@ -83,7 +84,7 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
             )
         }
         
-        // Location Pin (Dark Navy) sheltering the customized smiling parcel box
+        // Location Pin (Dark Navy/White) sheltering the customized smiling parcel box
         BoxWithConstraints(
             modifier = Modifier.fillMaxSize(0.65f),
             contentAlignment = Alignment.Center
@@ -95,17 +96,17 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
             Icon(
                 imageVector = Icons.Filled.LocationOn,
                 contentDescription = null,
-                tint = PatagonianTeal,
+                tint = tintColor,
                 modifier = Modifier.fillMaxSize()
             )
             
-            // Circular white interior mask inside the pin
+            // Circular adaptive interior mask inside the pin
             Box(
                 modifier = Modifier
                     .fillMaxSize(0.48f)
                     .offset(y = proportionalOffset)
                     .clip(CircleShape)
-                    .background(Color.White),
+                    .background(if (isDarkTheme) PatagonianTeal else Color.White),
                 contentAlignment = Alignment.Center
             ) {
                 // Orange cargo box centered inside the pin's core
@@ -210,12 +211,17 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
     val firebaseUser by viewModel.firebaseUser.collectAsStateWithLifecycle()
     var googleSignInErrorSHA1 by remember { mutableStateOf<String?>(null) }
 
-    val userNeedsRoleChoice = firebaseUser != null && viewModel.getPreferredRole(selectedUserId) == null
+    var preferredRoleInState by remember(selectedUserId, firebaseUser) {
+        mutableStateOf(viewModel.getPreferredRole(selectedUserId))
+    }
+
+    val userNeedsRoleChoice = firebaseUser != null && preferredRoleInState == null
 
     // Sync roles when changing simulated or real users
     LaunchedEffect(selectedUserId, firebaseUser) {
         if (firebaseUser != null) {
             val savedRole = viewModel.getPreferredRole(selectedUserId)
+            preferredRoleInState = savedRole
             if (savedRole != null) {
                 activeRole = savedRole
             } else {
@@ -258,11 +264,13 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
             } catch (e: ApiException) {
                 if (e.statusCode == 10) {
                     googleSignInErrorSHA1 = getSigningCertificateSHA1(context)
+                    Toast.makeText(context, "Error 10 (DEVELOPER_ERROR): Firma SHA-1 no registrada en Firebase. Abriendo panel corrector...", Toast.LENGTH_LONG).show()
                 } else {
                     val statusMessage = when (e.statusCode) {
                         12500 -> "Google Play Services no está configurado en el dispositivo"
                         7 -> "Error de conexión de red"
-                        else -> "Código de de error: ${e.statusCode}"
+                        12501 -> "Inicio de sesión cancelado por el usuario"
+                        else -> "Código de de error: ${e.statusCode} (${e.localizedMessage})"
                     }
                     Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
                 }
@@ -304,6 +312,7 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
             UserRoleSelectionScreen(
                 onRoleSelected = { chosenRole ->
                     viewModel.setPreferredRole(selectedUserId, chosenRole)
+                    preferredRoleInState = chosenRole
                     activeRole = chosenRole
                 }
             )
@@ -2645,10 +2654,12 @@ fun SimulatedIdentitySelectorDialog(
             if (e.statusCode == 10) {
                 onGoogleSignInError(getSigningCertificateSHA1(context))
                 onDismiss()
+                Toast.makeText(context, "Error 10 (DEVELOPER_ERROR): Firma SHA-1 no registrada en Firebase. Abriendo panel corrector...", Toast.LENGTH_LONG).show()
             } else {
                 val statusMessage = when (e.statusCode) {
                     12500 -> "Google Play Services no está configurado en el dispositivo"
                     7 -> "Error de conexión de red"
+                    12501 -> "Inicio de sesión cancelado por el usuario"
                     else -> "Código de error ${e.statusCode}: ${e.localizedMessage}"
                 }
                 Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
@@ -3543,7 +3554,7 @@ fun OnboardingAuthScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Spacer(modifier = Modifier.height(20.dp))
-            PataCargoVectorLogo(modifier = Modifier.size(100.dp))
+            PataCargoVectorLogo(modifier = Modifier.size(100.dp), isDarkTheme = true)
             
             Text(
                 text = "PATA CARGO",
@@ -3882,7 +3893,7 @@ fun UserRoleSelectionScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
         ) {
-            PataCargoVectorLogo(modifier = Modifier.size(80.dp))
+            PataCargoVectorLogo(modifier = Modifier.size(80.dp), isDarkTheme = true)
 
             Text(
                 text = "¡BIENVENIDO A PATA CARGO!",
