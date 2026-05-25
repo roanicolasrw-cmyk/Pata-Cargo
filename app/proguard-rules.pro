@@ -19,3 +19,18 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Firebase & Database Entity Preservation Rules
+-keep class com.example.data.** { *; }
+-keepclassmembers class com.example.data.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
+
+# Preserve Firestore annotation fields
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-keepclassmembers class * {
+    @com.google.firebase.firestore.DocumentId <fields>;
+    @com.google.firebase.firestore.ServerTimestamp <fields>;
+}
