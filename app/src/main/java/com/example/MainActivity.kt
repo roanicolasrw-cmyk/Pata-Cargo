@@ -232,8 +232,11 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
         }
     }
 
-    if (firebaseUser == null) {
-        // Reusable google sign in configuration inside Onboarding screen
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        if (firebaseUser == null) {
+            // Reusable google sign in configuration inside Onboarding screen
         val googleLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartActivityForResult()
         ) { result ->
@@ -297,19 +300,19 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
             viewModel = viewModel,
             onGoogleSignInIntent = { triggerOnboardingGoogleSignIn() }
         )
-    } else if (userNeedsRoleChoice) {
-        UserRoleSelectionScreen(
-            onRoleSelected = { chosenRole ->
-                viewModel.setPreferredRole(selectedUserId, chosenRole)
-                activeRole = chosenRole
-            }
-        )
-    } else {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
+        } else if (userNeedsRoleChoice) {
+            UserRoleSelectionScreen(
+                onRoleSelected = { chosenRole ->
+                    viewModel.setPreferredRole(selectedUserId, chosenRole)
+                    activeRole = chosenRole
+                }
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 //--- BRANDED TOP LOGISTICS ROW & SIMULATOR CHEATS BAR ---
                 TopAppBar(
@@ -641,105 +644,106 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                     onDismiss = { viewModel.setActiveChatShipmentId(null) }
                 )
             }
+        }
+    }
 
-            // 6. Google Sign-In SHA-1 Error Code 10 Diagnostic Dialog
-            if (googleSignInErrorSHA1 != null) {
-                val sha1Fingerprint = googleSignInErrorSHA1!!
-                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-                
-                AlertDialog(
-                    onDismissRequest = { googleSignInErrorSHA1 = null },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
-                            contentDescription = null,
-                            tint = CoralRed,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    },
-                    title = {
+    // 6. Google Sign-In SHA-1 Error Code 10 Diagnostic Dialog
+        if (googleSignInErrorSHA1 != null) {
+            val sha1Fingerprint = googleSignInErrorSHA1!!
+            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+            
+            AlertDialog(
+                onDismissRequest = { googleSignInErrorSHA1 = null },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = CoralRed,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        "Error 10 de Google Sign-In",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = PatagonianTeal,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(
-                            "Error 10 de Google Sign-In",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = PatagonianTeal,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            "Este error (Código 10: DEVELOPER_ERROR) ocurre cuando la firma SHA-1 de esta aplicación no está registrada en tu consola de Firebase.",
+                            fontSize = 12.sp,
+                            color = Color.DarkGray
                         )
-                    },
-                    text = {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        Text(
+                            "Para solucionarlo de forma definitiva:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PatagonianTeal
+                        )
+                        Text(
+                            "1. Copia la firma SHA-1 que aparece a continuación.\n" +
+                            "2. Regístrala en la consola de Firebase (Ajustes -> General -> Tus apps) para tu paquete 'com.aistudio.patacargo.virchm'.\n" +
+                            "3. Vuelve a descargar el archivo 'google-services.json' y súbelo.",
+                            fontSize = 11.sp,
+                            color = Color.DarkGray
+                        )
+                        
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = LightBackground),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, CardBorderColor),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                "Este error (Código 10: DEVELOPER_ERROR) ocurre cuando la firma SHA-1 de esta aplicación no está registrada en tu consola de Firebase.",
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
-                            Text(
-                                "Para solucionarlo de forma definitiva:",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PatagonianTeal
-                            )
-                            Text(
-                                "1. Copia la firma SHA-1 que aparece a continuación.\n" +
-                                "2. Regístrala en la consola de Firebase (Ajustes -> General -> Tus apps) para tu paquete 'com.aistudio.patacargo.virchm'.\n" +
-                                "3. Vuelve a descargar el archivo 'google-services.json' y súbelo.",
-                                fontSize = 11.sp,
-                                color = Color.DarkGray
-                            )
-                            
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = LightBackground),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, CardBorderColor),
-                                modifier = Modifier.fillMaxWidth()
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                Text(
+                                    "FIRMADO CON SHA-1:",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Gray
+                                )
+                                Text(
+                                    text = sha1Fingerprint,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = PatagonianTeal,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Button(
+                                    onClick = {
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(sha1Fingerprint))
+                                        Toast.makeText(context, "Firma SHA-1 copiada al portapapeles", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                                    contentPadding = PaddingValues(0.dp)
                                 ) {
-                                    Text(
-                                        "FIRMADO CON SHA-1:",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Gray
-                                    )
-                                    Text(
-                                        text = sha1Fingerprint,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = PatagonianTeal,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Button(
-                                        onClick = {
-                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(sha1Fingerprint))
-                                            Toast.makeText(context, "Firma SHA-1 copiada al portapapeles", Toast.LENGTH_SHORT).show()
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
-                                        shape = RoundedCornerShape(6.dp),
-                                        modifier = Modifier.fillMaxWidth().height(32.dp),
-                                        contentPadding = PaddingValues(0.dp)
-                                    ) {
-                                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Copiar SHA-1", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    }
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copiar SHA-1", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
                         }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { googleSignInErrorSHA1 = null }) {
-                            Text("Entendido", color = PatagonianTeal, fontWeight = FontWeight.Bold)
-                        }
                     }
-                )
-            }
+                },
+                confirmButton = {
+                    TextButton(onClick = { googleSignInErrorSHA1 = null }) {
+                        Text("Entendido", color = PatagonianTeal, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
     }
 }
