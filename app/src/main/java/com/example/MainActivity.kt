@@ -2455,9 +2455,9 @@ fun SimulatedIdentitySelectorDialog(
             val webClientId = try {
                 context.getString(
                     context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-                ).ifEmpty { "249339352923-gco9g02v3cajcl287g5tbfm7cgdtr6f8.apps.googleusercontent.com" }
+                ).ifEmpty { "14033808612-6i5qspi0cbve77c7q2up08ji37nicq70.apps.googleusercontent.com" }
             } catch (e: Exception) {
-                "249339352923-gco9g02v3cajcl287g5tbfm7cgdtr6f8.apps.googleusercontent.com"
+                "14033808612-6i5qspi0cbve77c7q2up08ji37nicq70.apps.googleusercontent.com"
             }
 
             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
