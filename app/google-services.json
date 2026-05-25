@@ -1,38 +1,44 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "pata-cargo-mock",
-    "storage_bucket": "pata-cargo-mock.appspot.com"
+    "project_number": "14033808612",
+    "project_id": "pata-cargo",
+    "storage_bucket": "pata-cargo.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789",
+        "mobilesdk_app_id": "1:14033808612:android:f3bed76568f3411e1310f1",
         "android_client_info": {
           "package_name": "com.aistudio.patacargo.virchm"
         }
       },
       "oauth_client": [
         {
-          "client_id": "249339352923-gco9g02v3cajcl287g5tbfm7cgdtr6f8.apps.googleusercontent.com",
+          "client_id": "14033808612-al94kmkdjiha17m64j6p1gpsdv8rdje3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.patacargo.virchm",
+            "certificate_hash": "d1e065e6759f1076ef450bccaadafe699d6c4d53"
+          }
+        },
+        {
+          "client_id": "14033808612-6i5qspi0cbve77c7q2up08ji37nicq70.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyMockKey-abcdef1234567890"
+          "current_key": "AIzaSyBp5xZPDLl8l0RGab09soad1CKAxtHatuU"
         }
       ],
       "services": {
-        "analytics_service": {
-          "status": 1
-        },
         "appinvite_service": {
-          "status": 1,
-          "other_platform_oauth_client": []
-        },
-        "ads_service": {
-          "status": 1
+          "other_platform_oauth_client": [
+            {
+              "client_id": "14033808612-6i5qspi0cbve77c7q2up08ji37nicq70.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
