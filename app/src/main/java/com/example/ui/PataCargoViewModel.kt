@@ -8,6 +8,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.FirebaseUser
 
 class PataCargoViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -15,6 +18,80 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Identity Simulation State
     val selectedUserId = MutableStateFlow("enviador_juan")
+
+    // Firebase Auth State
+    private val _firebaseUser = MutableStateFlow<FirebaseUser?>(null)
+    val firebaseUser: StateFlow<FirebaseUser?> = _firebaseUser.asStateFlow()
+
+    init {
+        try {
+            val auth = FirebaseAuth.getInstance()
+            _firebaseUser.value = auth.currentUser
+            auth.addAuthStateListener { firebaseAuth ->
+                val user = firebaseAuth.currentUser
+                _firebaseUser.value = user
+                if (user != null) {
+                    registerFirebaseUserInRoom(user)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun registerFirebaseUserInRoom(user: FirebaseUser) {
+        viewModelScope.launch {
+            val existingUser = repository.userDao.getUserById(user.uid)
+            if (existingUser == null) {
+                val newUser = UserEntity(
+                    id = user.uid,
+                    name = user.displayName ?: user.email?.substringBefore("@") ?: "Usuario Google",
+                    dni = "",
+                    rating = 5.0f,
+                    isVerified = true, // Google accounts are auto-verified
+                    isBiometricVerified = true,
+                    walletBalance = 75000.0, // Seed real Google account with simulated wallet balance
+                    registrationSelfie = null
+                )
+                repository.userDao.insertUser(newUser)
+            }
+            selectedUserId.value = user.uid
+        }
+    }
+
+    fun signInWithGoogleToken(idToken: String, onComplete: (Boolean, String?) -> Unit) {
+        try {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            FirebaseAuth.getInstance().signInWithCredential(credential)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val user = task.result?.user
+                        if (user != null) {
+                            _firebaseUser.value = user
+                            registerFirebaseUserInRoom(user)
+                            onComplete(true, null)
+                        } else {
+                            onComplete(false, "No se encontró el usuario de Firebase")
+                        }
+                    } else {
+                        onComplete(false, task.exception?.message ?: "Error al iniciar sesión en Firebase")
+                    }
+                }
+        } catch (e: Exception) {
+            onComplete(false, e.message ?: "Excepción inesperada")
+        }
+    }
+
+    fun signOutRealUser() {
+        try {
+            FirebaseAuth.getInstance().signOut()
+            _firebaseUser.value = null
+            // Reset to standard simulated user
+            selectedUserId.value = "enviador_juan"
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     // Retrieve active User info
     @OptIn(ExperimentalCoroutinesApi::class)

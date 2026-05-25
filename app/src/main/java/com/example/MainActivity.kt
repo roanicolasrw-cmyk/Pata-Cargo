@@ -48,6 +48,13 @@ import com.example.ui.PataCargoViewModel
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
 fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
@@ -447,6 +454,7 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
             SimulatedIdentitySelectorDialog(
                 users = users,
                 selectedUserId = selectedUserId,
+                viewModel = viewModel,
                 onSelectUser = { uid ->
                     viewModel.changeActiveRole(uid)
                     showProfileSwitcher = false
@@ -2400,9 +2408,74 @@ fun BiometricScanningSimulator(
 fun SimulatedIdentitySelectorDialog(
     users: List<UserEntity>,
     selectedUserId: String,
+    viewModel: PataCargoViewModel,
     onSelectUser: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val firebaseUser by viewModel.firebaseUser.collectAsStateWithLifecycle()
+
+    // Google Sign-In Launcher setup
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            val idToken = account?.idToken
+            if (idToken != null) {
+                viewModel.signInWithGoogleToken(idToken) { success, errorMsg ->
+                    if (success) {
+                        Toast.makeText(context, "¡Sesión iniciada correctamente con Google!", Toast.LENGTH_LONG).show()
+                        onDismiss()
+                    } else {
+                        Toast.makeText(context, "Error: ${errorMsg ?: "Error de vinculación"}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } else {
+                Toast.makeText(context, "No se recibió un Token de ID válido de Google.", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: ApiException) {
+            val statusMessage = when (e.statusCode) {
+                12500 -> "Google Play Services no está configurado en el dispositivo"
+                7 -> "Error de conexión de red"
+                else -> "Código de error ${e.statusCode}: ${e.localizedMessage}"
+            }
+            Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Fallo al iniciar sesión: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Function to trigger Google Sign-In
+    fun launchGoogleSignIn() {
+        try {
+            // Retrieve default web client ID from strings or fallback
+            val webClientId = try {
+                context.getString(
+                    context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                ).ifEmpty { "249339352923-gco9g02v3cajcl287g5tbfm7cgdtr6f8.apps.googleusercontent.com" }
+            } catch (e: Exception) {
+                "249339352923-gco9g02v3cajcl287g5tbfm7cgdtr6f8.apps.googleusercontent.com"
+            }
+
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(webClientId)
+                .requestEmail()
+                .build()
+
+            val googleSignInClient = GoogleSignIn.getClient(context, gso)
+            // Sign out first to force account chooser dialog
+            googleSignInClient.signOut().addOnCompleteListener {
+                val signInIntent = googleSignInClient.signInIntent
+                googleSignInLauncher.launch(signInIntent)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Error al preparar Google Sign-In: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -2422,8 +2495,115 @@ fun SimulatedIdentitySelectorDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Real Google Auth Panel
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (firebaseUser != null) TealLight else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = if (firebaseUser != null) PatagonianTeal else PatagonianTeal.copy(alpha = 0.25f)
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (firebaseUser != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AccountCircle,
+                                        contentDescription = "Usuario Autenticado",
+                                        tint = PatagonianTeal,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = firebaseUser?.displayName ?: "Usuario Google",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PatagonianTeal
+                                        )
+                                        Text(
+                                            text = firebaseUser?.email ?: "",
+                                            fontSize = 10.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        viewModel.signOutRealUser()
+                                        Toast.makeText(context, "Sesión de Google cerrada", Toast.LENGTH_SHORT).show()
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    Text("Cerrar Sesión", color = CoralRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "🔒 Sincronización Real con Firebase",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PatagonianTeal,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Usa Google para sincronizar tus cargas, ofertas y revisar las calificaciones de forma oficial.",
+                                fontSize = 10.sp,
+                                color = Color.Gray,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Button(
+                                onClick = { launchGoogleSignIn() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color.DarkGray
+                                ),
+                                border = BorderStroke(0.5.dp, Color.LightGray),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .testTag("google_login_button"),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Fingerprint,
+                                        contentDescription = "Google",
+                                        tint = SunsetGold,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Inicia Sesión con Google",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Text(
-                    "Selecciona una identidad para interactuar como Enviador (comercio o particular) o Portador (viajero con espacio ocioso).",
+                    "O de forma rápida, selecciona una identidad simulada de prueba para probar el flujo de todos los roles:",
                     fontSize = 11.sp,
                     color = Color.Gray,
                     textAlign = TextAlign.Center,
@@ -2431,7 +2611,7 @@ fun SimulatedIdentitySelectorDialog(
                 )
                 
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 280.dp),
+                    modifier = Modifier.heightIn(max = 240.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(users, key = { it.id }) { u ->

@@ -1,0 +1,41 @@
+{
+  "project_info": {
+    "project_number": "123456789012",
+    "project_id": "pata-cargo-mock",
+    "storage_bucket": "pata-cargo-mock.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789",
+        "android_client_info": {
+          "package_name": "com.aistudio.patacargo.virchm"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "249339352923-gco9g02v3cajcl287g5tbfm7cgdtr6f8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyMockKey-abcdef1234567890"
+        }
+      ],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "appinvite_service": {
+          "status": 1,
+          "other_platform_oauth_client": []
+        },
+        "ads_service": {
+          "status": 1
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
