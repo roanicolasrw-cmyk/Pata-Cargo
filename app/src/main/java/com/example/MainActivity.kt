@@ -64,14 +64,14 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
     ) {
         // Draw the circular boundary outlines as seen in the logo
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val stroke = 2.dp.toPx()
+            val stroke = size.minDimension * 0.045f // Proportional line weight
             // Outer Navy Blue arc
             drawArc(
                 color = PatagonianTeal,
                 startAngle = 100f,
                 sweepAngle = 260f,
                 useCenter = false,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke * 1.5f)
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
             )
             // Outer Orange arc
             drawArc(
@@ -79,15 +79,19 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
                 startAngle = -20f,
                 sweepAngle = 105f,
                 useCenter = false,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke * 1.5f)
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
             )
         }
         
         // Location Pin (Dark Navy) sheltering the customized smiling parcel box
-        Box(
+        BoxWithConstraints(
             modifier = Modifier.fillMaxSize(0.65f),
             contentAlignment = Alignment.Center
         ) {
+            val heightDp = maxHeight
+            val widthDp = maxWidth
+            val proportionalOffset = heightDp * -0.065f // Proportional elevation matching the pin head center
+            
             Icon(
                 imageVector = Icons.Filled.LocationOn,
                 contentDescription = null,
@@ -99,7 +103,7 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
             Box(
                 modifier = Modifier
                     .fillMaxSize(0.48f)
-                    .offset(y = (-2).dp)
+                    .offset(y = proportionalOffset)
                     .clip(CircleShape)
                     .background(Color.White),
                 contentAlignment = Alignment.Center
@@ -108,17 +112,18 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize(0.8f)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(widthDp * 0.08f))
                         .background(SunsetGold),
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
+                        val thickness = size.minDimension * 0.08f
                         // Parcel white tape diagonal line
                         drawLine(
                             color = Color.White,
-                            start = androidx.compose.ui.geometry.Offset(size.width * 0.1f, size.height * 0.35f),
-                            end = androidx.compose.ui.geometry.Offset(size.width * 0.9f, size.height * 0.35f),
-                            strokeWidth = 2.dp.toPx()
+                            start = androidx.compose.ui.geometry.Offset(size.width * 0.15f, size.height * 0.35f),
+                            end = androidx.compose.ui.geometry.Offset(size.width * 0.85f, size.height * 0.35f),
+                            strokeWidth = thickness
                         )
                         // Playful box smile arc (Navy Blue)
                         drawArc(
@@ -126,7 +131,7 @@ fun PataCargoVectorLogo(modifier: Modifier = Modifier) {
                             startAngle = 10f,
                             sweepAngle = 160f,
                             useCenter = false,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = thickness * 0.8f),
                             topLeft = androidx.compose.ui.geometry.Offset(size.width * 0.25f, size.height * 0.45f),
                             size = androidx.compose.ui.geometry.Size(size.width * 0.5f, size.height * 0.35f)
                         )
@@ -203,7 +208,7 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
     val carrierUnderSelfieVerification by viewModel.carrierUnderSelfieVerification.collectAsStateWithLifecycle()
 
     val firebaseUser by viewModel.firebaseUser.collectAsStateWithLifecycle()
-    var isSimulationBypass by remember { mutableStateOf(false) }
+    var googleSignInErrorSHA1 by remember { mutableStateOf<String?>(null) }
 
     val userNeedsRoleChoice = firebaseUser != null && viewModel.getPreferredRole(selectedUserId) == null
 
@@ -227,7 +232,7 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
         }
     }
 
-    if (firebaseUser == null && !isSimulationBypass) {
+    if (firebaseUser == null) {
         // Reusable google sign in configuration inside Onboarding screen
         val googleLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartActivityForResult()
@@ -248,12 +253,16 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                     Toast.makeText(context, "No se recibió un Token de ID válido de Google.", Toast.LENGTH_LONG).show()
                 }
             } catch (e: ApiException) {
-                val statusMessage = when (e.statusCode) {
-                    12500 -> "Google Play Services no está configurado en el dispositivo"
-                    7 -> "Error de conexión de red"
-                    else -> "Código de de error: ${e.statusCode}"
+                if (e.statusCode == 10) {
+                    googleSignInErrorSHA1 = getSigningCertificateSHA1(context)
+                } else {
+                    val statusMessage = when (e.statusCode) {
+                        12500 -> "Google Play Services no está configurado en el dispositivo"
+                        7 -> "Error de conexión de red"
+                        else -> "Código de de error: ${e.statusCode}"
+                    }
+                    Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
                 }
-                Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Fallo al iniciar sesión: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             }
@@ -286,7 +295,6 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
 
         OnboardingAuthScreen(
             viewModel = viewModel,
-            onBypassClicked = { isSimulationBypass = true },
             onGoogleSignInIntent = { triggerOnboardingGoogleSignIn() }
         )
     } else if (userNeedsRoleChoice) {
@@ -548,6 +556,9 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                         viewModel.changeActiveRole(uid)
                         showProfileSwitcher = false
                     },
+                    onGoogleSignInError = { sha1 ->
+                        googleSignInErrorSHA1 = sha1
+                    },
                     onDismiss = { showProfileSwitcher = false }
                 )
             }
@@ -628,6 +639,105 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                     messages = chatMessages,
                     onSend = { text -> viewModel.sendMessage(s.id, text) },
                     onDismiss = { viewModel.setActiveChatShipmentId(null) }
+                )
+            }
+
+            // 6. Google Sign-In SHA-1 Error Code 10 Diagnostic Dialog
+            if (googleSignInErrorSHA1 != null) {
+                val sha1Fingerprint = googleSignInErrorSHA1!!
+                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                
+                AlertDialog(
+                    onDismissRequest = { googleSignInErrorSHA1 = null },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = CoralRed,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    },
+                    title = {
+                        Text(
+                            "Error 10 de Google Sign-In",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = PatagonianTeal,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    text = {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Este error (Código 10: DEVELOPER_ERROR) ocurre cuando la firma SHA-1 de esta aplicación no está registrada en tu consola de Firebase.",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                            Text(
+                                "Para solucionarlo de forma definitiva:",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PatagonianTeal
+                            )
+                            Text(
+                                "1. Copia la firma SHA-1 que aparece a continuación.\n" +
+                                "2. Regístrala en la consola de Firebase (Ajustes -> General -> Tus apps) para tu paquete 'com.aistudio.patacargo.virchm'.\n" +
+                                "3. Vuelve a descargar el archivo 'google-services.json' y súbelo.",
+                                fontSize = 11.sp,
+                                color = Color.DarkGray
+                            )
+                            
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = LightBackground),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, CardBorderColor),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        "FIRMADO CON SHA-1:",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Gray
+                                    )
+                                    Text(
+                                        text = sha1Fingerprint,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = PatagonianTeal,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Button(
+                                        onClick = {
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(sha1Fingerprint))
+                                            Toast.makeText(context, "Firma SHA-1 copiada al portapapeles", Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth().height(32.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copiar SHA-1", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { googleSignInErrorSHA1 = null }) {
+                            Text("Entendido", color = PatagonianTeal, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 )
             }
         }
@@ -2500,6 +2610,7 @@ fun SimulatedIdentitySelectorDialog(
     selectedUserId: String,
     viewModel: PataCargoViewModel,
     onSelectUser: (String) -> Unit,
+    onGoogleSignInError: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -2527,12 +2638,17 @@ fun SimulatedIdentitySelectorDialog(
                 Toast.makeText(context, "No se recibió un Token de ID válido de Google.", Toast.LENGTH_LONG).show()
             }
         } catch (e: ApiException) {
-            val statusMessage = when (e.statusCode) {
-                12500 -> "Google Play Services no está configurado en el dispositivo"
-                7 -> "Error de conexión de red"
-                else -> "Código de error ${e.statusCode}: ${e.localizedMessage}"
+            if (e.statusCode == 10) {
+                onGoogleSignInError(getSigningCertificateSHA1(context))
+                onDismiss()
+            } else {
+                val statusMessage = when (e.statusCode) {
+                    12500 -> "Google Play Services no está configurado en el dispositivo"
+                    7 -> "Error de conexión de red"
+                    else -> "Código de error ${e.statusCode}: ${e.localizedMessage}"
+                }
+                Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
             }
-            Toast.makeText(context, "Fallo de Google Sign-In: $statusMessage", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(context, "Fallo al iniciar sesión: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
@@ -3391,7 +3507,6 @@ fun ShipmentDetailAndOfferDialog(
 @Composable
 fun OnboardingAuthScreen(
     viewModel: PataCargoViewModel,
-    onBypassClicked: () -> Unit,
     onGoogleSignInIntent: () -> Unit
 ) {
     var isSignUpMode by remember { mutableStateOf(false) }
@@ -3738,16 +3853,6 @@ fun OnboardingAuthScreen(
                 }
             }
 
-            TextButton(onClick = onBypassClicked) {
-                Text(
-                    text = "⚙️ Entrar en modo simulación de prueba (Modo Demo)",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
-                )
-            }
             Spacer(modifier = Modifier.height(20.dp))
         }
     }
@@ -3900,4 +4005,43 @@ fun UserRoleSelectionScreen(
             )
         }
     }
+}
+
+fun getSigningCertificateSHA1(context: android.content.Context): String {
+    try {
+        val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                android.content.pm.PackageManager.GET_SIGNATURES
+            )
+        }
+        val signatures = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures
+        }
+        if (signatures != null && signatures.isNotEmpty()) {
+            val cert = signatures[0].toByteArray()
+            val md = java.security.MessageDigest.getInstance("SHA-1")
+            val publicKey = md.digest(cert)
+            val hexString = java.lang.StringBuilder()
+            for (i in publicKey.indices) {
+                val appendString = java.lang.Integer.toHexString(0xFF and publicKey[i].toInt()).uppercase()
+                if (appendString.length == 1) hexString.append("0")
+                hexString.append(appendString)
+                if (i < publicKey.size - 1) hexString.append(":")
+            }
+            return hexString.toString()
+        }
+    } catch (e: Exception) {
+        return "Error al extraer SHA-1: ${e.localizedMessage}"
+    }
+    return "SHA-1 no disponible"
 }
