@@ -211,19 +211,32 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
     val firebaseUser by viewModel.firebaseUser.collectAsStateWithLifecycle()
     var googleSignInErrorSHA1 by remember { mutableStateOf<String?>(null) }
 
+    val isAdmin = firebaseUser?.email == "patacargo.app@gmail.com"
+
     var preferredRoleInState by remember(selectedUserId, firebaseUser) {
-        mutableStateOf(if (selectedUserId.isNotEmpty()) viewModel.getPreferredRole(selectedUserId) else null)
+        val calculated = if (selectedUserId.isNotEmpty()) viewModel.getPreferredRole(selectedUserId) else null
+        mutableStateOf(if (isAdmin) "ADMIN" else calculated)
     }
 
-    val userNeedsRoleChoice = firebaseUser != null && selectedUserId.isNotEmpty() && preferredRoleInState == null
+    val userNeedsRoleChoice = firebaseUser != null && selectedUserId.isNotEmpty() && !isAdmin && preferredRoleInState == null
 
     // Sync roles when changing simulated or real users
     LaunchedEffect(selectedUserId, firebaseUser) {
-        if (firebaseUser != null && selectedUserId.isNotEmpty()) {
-            val savedRole = viewModel.getPreferredRole(selectedUserId)
-            preferredRoleInState = savedRole
-            if (savedRole != null) {
-                activeRole = savedRole
+        if (firebaseUser != null) {
+            if (isAdmin) {
+                activeRole = "ADMIN"
+            } else if (selectedUserId.isNotEmpty()) {
+                val savedRole = viewModel.getPreferredRole(selectedUserId)
+                preferredRoleInState = savedRole
+                if (savedRole != null && savedRole != "ADMIN") {
+                    activeRole = savedRole
+                } else if (savedRole == "ADMIN") {
+                    viewModel.setPreferredRole(selectedUserId, "ENVIADOR")
+                    preferredRoleInState = "ENVIADOR"
+                    activeRole = "ENVIADOR"
+                } else {
+                    activeRole = "ENVIADOR"
+                }
             }
         }
     }
@@ -423,19 +436,21 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        val roles = listOf(
-                            Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
-                            Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga"),
-                            Triple("ADMIN", Icons.Filled.Security, "Panel Admin")
-                        )
+                        val roles = if (isAdmin) {
+                            listOf(
+                                Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
+                                Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga"),
+                                Triple("ADMIN", Icons.Filled.Security, "Panel Admin")
+                            )
+                        } else {
+                            listOf(
+                                Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
+                                Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga")
+                            )
+                        }
                         
                         roles.forEach { (role, icon, title) ->
                             val isSelected = activeRole == role
-                            val isSimulatedRoleMatch = when (role) {
-                                "ADMIN" -> selectedUserId == "admin"
-                                "PORTADOR" -> selectedUserId.startsWith("portador")
-                                else -> selectedUserId.startsWith("enviador")
-                            }
 
                             FilterChip(
                                 selected = isSelected,
@@ -463,7 +478,7 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                                 },
                                 colors = FilterChipDefaults.filterChipColors()
                                     .copy(
-                                        selectedContainerColor = if (isSimulatedRoleMatch) PatagonianTeal else SlateGrey,
+                                        selectedContainerColor = PatagonianTeal,
                                         selectedLabelColor = Color.White,
                                         containerColor = MaterialTheme.colorScheme.surface,
                                         labelColor = MaterialTheme.colorScheme.onSurface
@@ -471,8 +486,8 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                                 border = FilterChipDefaults.filterChipBorder(
                                     selected = isSelected,
                                     enabled = true,
-                                    borderColor = if (isSimulatedRoleMatch) SunsetGold else CardBorderColor,
-                                    selectedBorderColor = if (isSimulatedRoleMatch) SunsetGold else PatagonianTeal,
+                                    borderColor = CardBorderColor,
+                                    selectedBorderColor = PatagonianTeal,
                                     disabledBorderColor = CardBorderColor
                                 ),
                                 shape = RoundedCornerShape(20.dp),
@@ -530,16 +545,33 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                                 }
                             )
                         }
-                        else -> {
-                            AdminSectionLayout(
-                                viewModel = viewModel,
-                                currentTab = adminTab,
-                                onTabSelected = { adminTab = it },
-                                onApproveVerify = { carrierId ->
-                                    viewModel.adminApproveCarrier(carrierId)
-                                    Toast.makeText(context, "Portador aprobado con éxito", Toast.LENGTH_SHORT).show()
+                        "ADMIN" -> {
+                            if (isAdmin) {
+                                AdminSectionLayout(
+                                    viewModel = viewModel,
+                                    currentTab = adminTab,
+                                    onTabSelected = { adminTab = it },
+                                    onApproveVerify = { carrierId ->
+                                        viewModel.adminApproveCarrier(carrierId)
+                                        Toast.makeText(context, "Portador aprobado con éxito", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("No tienes permisos de Administrador.", color = CoralRed, fontWeight = FontWeight.Bold)
                                 }
-                            )
+                            }
+                        }
+                        else -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize().padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Rol no definido o no autorizado.", color = CoralRed, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

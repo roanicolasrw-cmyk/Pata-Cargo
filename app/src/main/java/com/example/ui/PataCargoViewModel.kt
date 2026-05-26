@@ -17,7 +17,11 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
     val repository = Repository(application)
 
     // Identity Simulation State
-    val selectedUserId = MutableStateFlow(FirebaseAuth.getInstance().currentUser?.uid ?: "")
+    val selectedUserId = MutableStateFlow(
+        FirebaseAuth.getInstance().currentUser?.let { user ->
+            if (user.email == "patacargo.app@gmail.com") "admin" else user.uid
+        } ?: ""
+    )
 
     // Firebase Auth State
     private val _firebaseUser = MutableStateFlow<FirebaseUser?>(null)
@@ -53,21 +57,23 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun registerFirebaseUserInRoom(user: FirebaseUser) {
         viewModelScope.launch {
-            val existingUser = repository.userDao.getUserById(user.uid)
+            val isAdmin = user.email == "patacargo.app@gmail.com"
+            val userIdToUse = if (isAdmin) "admin" else user.uid
+            val existingUser = repository.userDao.getUserById(userIdToUse)
             if (existingUser == null) {
                 val newUser = UserEntity(
-                    id = user.uid,
-                    name = user.displayName ?: user.email?.substringBefore("@") ?: "Usuario Real",
-                    dni = "",
+                    id = userIdToUse,
+                    name = if (isAdmin) "Administración Pata Cargo" else (user.displayName ?: user.email?.substringBefore("@") ?: "Usuario Real"),
+                    dni = if (isAdmin) "Administrador" else "",
                     rating = 5.0f,
                     isVerified = true, // Real accounts are auto-verified
                     isBiometricVerified = true,
-                    walletBalance = 75000.0, // Seed real account with simulated wallet balance
+                    walletBalance = if (isAdmin) 1250000.0 else 75000.0, // Seed real account with simulated wallet balance
                     registrationSelfie = null
                 )
                 repository.userDao.insertUser(newUser)
             }
-            selectedUserId.value = user.uid
+            selectedUserId.value = userIdToUse
         }
     }
 
