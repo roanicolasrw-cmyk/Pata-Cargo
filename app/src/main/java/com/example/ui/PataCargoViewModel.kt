@@ -480,9 +480,8 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
         .flatMapLatest { uid -> repository.shipmentDao.getShipmentsByCarrierFlow(uid) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Available shipments (status 'PENDIENTE' and paid via Mercado Pago escrow)
+    // Available shipments (status 'PENDIENTE')
     val pendingShipments: StateFlow<List<ShipmentEntity>> = repository.shipmentDao.getPendingShipmentsFlow()
-        .map { list -> list.filter { it.mpPaymentStatus == "PAGADO" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Current carrier's favorite routes
@@ -653,30 +652,7 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
             repository.shipmentDao.insertShipment(shipment)
             pushToFirestore("shipments", shipment.id.toString(), shipment)
 
-            // Trigger real Mercado Pago Checkout Preference generation asynchronously
-            val totalCost = (price * 1.15) + insuranceCost
-            val sender = repository.userDao.getUserById(senderId)
-            val payerEmail = sender?.mercadoPagoEmail ?: sender?.id ?: "usuario@patacargo.com"
-
-            generateMercadoPagoPreference(
-                shipmentId = randomId,
-                title = title,
-                amount = totalCost,
-                payerEmail = payerEmail
-            ) { prefId, checkoutUrl ->
-                viewModelScope.launch {
-                    val currentShipment = repository.shipmentDao.getShipmentById(randomId)
-                    if (currentShipment != null) {
-                        val finalUrl = checkoutUrl ?: "https://www.mercadopago.com.ar/checkout/v1/payment/redirect/?preference-id=${prefId ?: "dummy"}"
-                        val updated = currentShipment.copy(
-                            mpPreferenceId = prefId ?: "PREF_$randomId",
-                            mpCheckoutUrl = finalUrl
-                        )
-                        repository.shipmentDao.updateShipment(updated)
-                        pushToFirestore("shipments", randomId.toString(), updated)
-                    }
-                }
-            }
+            // Payment preference will be generated only when an offer is accepted, not here.
         }
     }
 
@@ -723,15 +699,18 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
                     val sandboxUrl = respBody?.get("sandbox_init_point") as? String
                     val liveUrl = respBody?.get("init_point") as? String
                     val targetUrl = sandboxUrl ?: liveUrl
+                    android.util.Log.d("PataCargo", "Mercado Pago Preference Created: $prefId URL: $targetUrl")
                     withContext(Dispatchers.Main) {
                         onComplete(prefId, targetUrl)
                     }
                 } else {
+                    android.util.Log.e("PataCargo", "Mercado Pago Preference Error: ${response.errorBody()?.string()}")
                     withContext(Dispatchers.Main) {
                         onComplete(null, null)
                     }
                 }
             } catch (e: Exception) {
+                android.util.Log.e("PataCargo", "Mercado Pago Exception", e)
                 withContext(Dispatchers.Main) {
                     onComplete(null, null)
                 }
@@ -773,8 +752,10 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
                 if (isPaid) {
                     val shipment = repository.shipmentDao.getShipmentById(shipmentId)
                     if (shipment != null) {
+                        // If paid, we officially mark the shipment as ACCEPTED (carrier is already assigned during acceptOffer)
                         val updatedShipment = shipment.copy(
-                            mpPaymentStatus = "PAGADO"
+                            mpPaymentStatus = "PAGADO",
+                            status = "ACEPTADO"
                         )
                         repository.shipmentDao.updateShipment(updatedShipment)
                         pushToFirestore("shipments", shipmentId.toString(), updatedShipment)
@@ -825,49 +806,55 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun acceptOffer(shipmentId: Int, offer: OfferEntity) {
+    fun acceptOffer(shipmentId: Int, offer: OfferEntity, onUrlReady: (String?) -> Unit = {}) {
         viewModelScope.launch {
             val shipment = repository.shipmentDao.getShipmentById(shipmentId) ?: return@launch
             
-            // Mark other offers as rejected, this as accepted
-            repository.offerDao.updateOfferStatus(offer.id, "ACEPTADO")
-            pushToFirestore("offers", offer.id.toString(), offer.copy(status = "ACEPTADO"))
+            // Generate Mercado Pago Preference for the offer amount
+            val totalCost = (offer.amount * 1.15) + shipment.insuranceCost
+            val sender = repository.userDao.getUserById(shipment.senderId)
+            val payerEmail = sender?.mercadoPagoEmail ?: sender?.id ?: "usuario@patacargo.com"
 
-            repository.offerDao.rejectOtherOffers(shipmentId, offer.id)
-            try {
-                val otherOffers = repository.offerDao.getOffersForShipmentFlow(shipmentId).first()
-                for (o in otherOffers) {
-                    if (o.id != offer.id) {
-                        pushToFirestore("offers", o.id.toString(), o.copy(status = "RECHAZADO"))
+            generateMercadoPagoPreference(
+                shipmentId = shipmentId,
+                title = shipment.title,
+                amount = totalCost,
+                payerEmail = payerEmail
+            ) { prefId, checkoutUrl ->
+                viewModelScope.launch {
+                    val currentShipment = repository.shipmentDao.getShipmentById(shipmentId)
+                    if (currentShipment != null) {
+                        val finalUrl = checkoutUrl ?: "https://www.mercadopago.com.ar/checkout/v1/payment/redirect/?preference-id=${prefId ?: "dummy"}"
+                        
+                        // Assign carrier and save payment link, but don't mark as ACEPTADO yet if we want to wait for payment
+                        // Or mark as ACEPTADO but with PENDIENTE payment. 
+                        // The user said "el pago... debe realizarse al momento de aceptar".
+                        // Let's mark as ACEPTADO and assign carrier, but it won't be "ready" until payment is verified.
+                        
+                        val updated = currentShipment.copy(
+                            carrierId = offer.carrierId,
+                            price = offer.amount,
+                            mpPreferenceId = prefId ?: "PREF_$shipmentId",
+                            mpCheckoutUrl = finalUrl,
+                            mpPaymentStatus = "PENDIENTE",
+                            status = "PAGO_PENDIENTE"
+                        )
+                        repository.shipmentDao.updateShipment(updated)
+                        pushToFirestore("shipments", shipmentId.toString(), updated)
+
+                        // Mark this offer as SELECTED (using status for now)
+                        repository.offerDao.updateOfferStatus(offer.id, "ACEPTADO")
+                        pushToFirestore("offers", offer.id.toString(), offer.copy(status = "ACEPTADO"))
+                        
+                        // Reject others
+                        repository.offerDao.rejectOtherOffers(shipmentId, offer.id)
+
+                        withContext(Dispatchers.Main) {
+                            onUrlReady(finalUrl)
+                        }
                     }
                 }
-            } catch (ex: Exception) {
-                ex.printStackTrace()
             }
-
-            // Dynamic escrow budget check
-            val previousPrice = shipment.price
-            val finalPrice = offer.amount
-
-            // If the offer is different than the shipment pre-calculated price, adjust sender wallet (inclusive of 15% commission difference)
-            if (finalPrice != previousPrice) {
-                val difference = (finalPrice - previousPrice) * 1.15
-                val sender = repository.userDao.getUserById(shipment.senderId)
-                if (sender != null) {
-                    val updatedSender = sender.copy(walletBalance = sender.walletBalance - difference)
-                    repository.userDao.updateUser(updatedSender)
-                    pushToFirestore("users", updatedSender.id, updatedSender)
-                }
-            }
-
-            // Update shipment state: Accepted, tied to Carrier
-            val updatedShipment = shipment.copy(
-                carrierId = offer.carrierId,
-                status = "ACEPTADO",
-                price = finalPrice // Use carrier bid
-            )
-            repository.shipmentDao.updateShipment(updatedShipment)
-            pushToFirestore("shipments", updatedShipment.id.toString(), updatedShipment)
         }
     }
 

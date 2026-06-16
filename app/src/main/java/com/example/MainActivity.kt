@@ -630,10 +630,19 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                     offers = selectedShipmentOffers,
                     currentUserId = selectedUserId,
                     onAcceptOffer = { offer ->
-                        viewModel.acceptOffer(shipment.id, offer)
+                        viewModel.acceptOffer(shipment.id, offer) { url ->
+                            if (!url.isNullOrEmpty()) {
+                                try {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Error abriendo link: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
                         viewModel.selectedShipmentIdDetail.value = null
                         scope.launch {
-                            Toast.makeText(context, "Oferta aceptada. El costo ha sido colocado en garantía (Escrow)!", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Abriendo Mercado Pago para respaldar fondos del envío...", Toast.LENGTH_LONG).show()
                         }
                     },
                     onSubmitDispute = {
@@ -1158,7 +1167,7 @@ fun SenderShipmentCard(
                 }
             }
 
-            if (shipment.mpPaymentStatus == "PENDIENTE") {
+            if (shipment.mpPaymentStatus == "PENDIENTE" && shipment.carrierId != null) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1177,7 +1186,7 @@ fun SenderShipmentCard(
                             )
                         }
                         Text(
-                            "Para que los portadores de la región puedan ver e interceptar tu envío, debes respaldar los fondos en escrow mediante un pago real.",
+                            "Has seleccionado un viajero. Para confirmar el envío y activar el respaldo de fondos en escrow, debes completar el pago.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                             lineHeight = 14.sp
@@ -2064,6 +2073,21 @@ fun ActiveCarrierJobCard(
                     }
 
                     when (shipment.status) {
+                        "PAGO_PENDIENTE" -> {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SunsetGold.copy(0.1f))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    "Esperando pago de enviador...",
+                                    fontSize = 11.sp,
+                                    color = SunsetGold,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         "ACEPTADO" -> {
                             Button(
                                 onClick = onScanCollection,
@@ -4718,7 +4742,7 @@ fun getSigningCertificateSHA1(context: android.content.Context): String {
         val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             context.packageManager.getPackageInfo(
                 context.packageName,
-                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+                PackageManager.GET_SIGNING_CERTIFICATES
             )
         } else {
             @Suppress("DEPRECATION")
