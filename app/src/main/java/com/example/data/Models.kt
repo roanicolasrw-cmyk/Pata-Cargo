@@ -15,10 +15,13 @@ data class UserEntity(
     var isVerified: Boolean = false,
     var isBiometricVerified: Boolean = false,
     var walletBalance: Double = 0.0,
-    var registrationSelfie: String? = null
+    var registrationSelfie: String? = null,
+    var mainRole: String = "ENVIADOR",
+    var mercadoPagoEmail: String? = null,
+    var isMercadoPagoConnected: Boolean = false
 ) : Serializable {
     // Constructor explícito sin argumentos para Firebase/Firestore
-    constructor() : this("", "", "", 0.0f, false, false, 0.0, null)
+    constructor() : this("", "", "", 0.0f, false, false, 0.0, null, "ENVIADOR", null, false)
 }
 
 @Keep
@@ -53,12 +56,16 @@ data class ShipmentEntity(
     var carrierId: String? = null,
     var qrValueCollection: String = "",
     var qrValueDelivery: String = "",
-    var timestamp: Long = System.currentTimeMillis()
+    var timestamp: Long = System.currentTimeMillis(),
+    var mpPreferenceId: String? = null,
+    var mpCheckoutUrl: String? = null,
+    var mpPaymentStatus: String = "PENDIENTE"
 ) : Serializable {
     // Constructor explícito sin argumentos para Firebase/Firestore
     constructor() : this(
         0, "", "", "", "", "", false, "", "PENDIENTE", 
-        0.0, 0.0, false, 0.0, "", null, "", "", System.currentTimeMillis()
+        0.0, 0.0, false, 0.0, "", null, "", "", System.currentTimeMillis(),
+        null, null, "PENDIENTE"
     )
 }
 

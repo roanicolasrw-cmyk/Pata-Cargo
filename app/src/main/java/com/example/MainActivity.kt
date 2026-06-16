@@ -55,6 +55,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 
 @Composable
 fun PataCargoVectorLogo(modifier: Modifier = Modifier, isDarkTheme: Boolean = false) {
@@ -213,30 +217,36 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
 
     val isAdmin = firebaseUser?.email == "patacargo.app@gmail.com"
 
-    var preferredRoleInState by remember(selectedUserId, firebaseUser) {
-        val calculated = if (selectedUserId.isNotEmpty()) viewModel.getPreferredRole(selectedUserId) else null
+    var preferredRoleInState by remember(selectedUserId, firebaseUser, currentUser) {
+        val calculated = currentUser?.mainRole ?: if (selectedUserId.isNotEmpty()) viewModel.getPreferredRole(selectedUserId) else null
         mutableStateOf(if (isAdmin) "ADMIN" else calculated)
     }
 
     val userNeedsRoleChoice = firebaseUser != null && selectedUserId.isNotEmpty() && !isAdmin && preferredRoleInState == null
 
-    // Sync roles when changing simulated or real users
-    LaunchedEffect(selectedUserId, firebaseUser) {
-        if (firebaseUser != null) {
-            if (isAdmin) {
-                activeRole = "ADMIN"
-            } else if (selectedUserId.isNotEmpty()) {
-                val savedRole = viewModel.getPreferredRole(selectedUserId)
-                preferredRoleInState = savedRole
-                if (savedRole != null && savedRole != "ADMIN") {
-                    activeRole = savedRole
-                } else if (savedRole == "ADMIN") {
-                    viewModel.setPreferredRole(selectedUserId, "ENVIADOR")
-                    preferredRoleInState = "ENVIADOR"
-                    activeRole = "ENVIADOR"
-                } else {
-                    activeRole = "ENVIADOR"
-                }
+    // Sync roles when changing simulated or real users from database / preferences
+    LaunchedEffect(selectedUserId, firebaseUser, currentUser) {
+        val user = currentUser
+        if (isAdmin) {
+            activeRole = "ADMIN"
+            preferredRoleInState = "ADMIN"
+        } else if (user != null) {
+            val userRole = user.mainRole
+            if (userRole.isNotEmpty()) {
+                preferredRoleInState = userRole
+                activeRole = userRole
+            }
+        } else if (firebaseUser != null && selectedUserId.isNotEmpty()) {
+            val savedRole = viewModel.getPreferredRole(selectedUserId)
+            preferredRoleInState = savedRole
+            if (savedRole != null && savedRole != "ADMIN") {
+                activeRole = savedRole
+            } else if (savedRole == "ADMIN") {
+                viewModel.setPreferredRole(selectedUserId, "ENVIADOR")
+                preferredRoleInState = "ENVIADOR"
+                activeRole = "ENVIADOR"
+            } else {
+                activeRole = "ENVIADOR"
             }
         }
     }
@@ -411,6 +421,17 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                                 expanded = showLogoutMenu,
                                 onDismissRequest = { showLogoutMenu = false }
                             ) {
+                                if (currentUser?.mainRole == "PORTADOR" && currentUser?.isMercadoPagoConnected == true) {
+                                    DropdownMenuItem(
+                                        text = { Text("Desvincular Mercado Pago", fontSize = 12.sp) },
+                                        leadingIcon = { Icon(Icons.Filled.Payment, contentDescription = null, tint = CoralRed, modifier = Modifier.size(16.dp)) },
+                                        onClick = {
+                                            showLogoutMenu = false
+                                            viewModel.disconnectMercadoPagoAccount(currentUser?.id ?: "")
+                                            Toast.makeText(context, "Mercado Pago desvinculado", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text("Cerrar Sesión") },
                                     leadingIcon = { Icon(Icons.Filled.ExitToApp, contentDescription = null, tint = CoralRed) },
@@ -425,76 +446,86 @@ fun PataCargoAppShell(modifier: Modifier = Modifier) {
                 )
 
                 //--- ROLE INTERACTIVE BAR CHIPS ---
-                Surface(
-                    tonalElevation = 2.dp,
-                    shadowElevation = 1.dp,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(0.4f)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val roles = if (isAdmin) {
-                            listOf(
-                                Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
-                                Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga"),
-                                Triple("ADMIN", Icons.Filled.Security, "Panel Admin")
-                            )
-                        } else {
-                            listOf(
-                                Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
-                                Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga")
-                            )
-                        }
-                        
-                        roles.forEach { (role, icon, title) ->
-                            val isSelected = activeRole == role
+                val roles = if (isAdmin) {
+                    listOf(
+                        Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
+                        Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga"),
+                        Triple("ADMIN", Icons.Filled.Security, "Panel Admin")
+                    )
+                } else if (currentUser?.mainRole == "PORTADOR") {
+                    listOf(
+                        Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga")
+                    )
+                } else if (currentUser?.mainRole == "ENVIADOR") {
+                    listOf(
+                        Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío")
+                    )
+                } else {
+                    listOf(
+                        Triple("ENVIADOR", Icons.Filled.AddBox, "Hacer Envío"),
+                        Triple("PORTADOR", Icons.Filled.LocalShipping, "Llevar Carga")
+                    )
+                }
 
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { 
-                                    activeRole = role
-                                    if (firebaseUser != null) {
-                                        viewModel.setPreferredRole(selectedUserId, role)
-                                    }
-                                },
-                                label = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = title,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = title,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
-                                        )
-                                    }
-                                },
-                                colors = FilterChipDefaults.filterChipColors()
-                                    .copy(
-                                        selectedContainerColor = PatagonianTeal,
-                                        selectedLabelColor = Color.White,
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                        labelColor = MaterialTheme.colorScheme.onSurface
-                                    ),
-                                border = FilterChipDefaults.filterChipBorder(
+                if (roles.size > 1) {
+                    Surface(
+                        tonalElevation = 2.dp,
+                        shadowElevation = 1.dp,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(0.4f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            roles.forEach { (role, icon, title) ->
+                                val isSelected = activeRole == role
+
+                                FilterChip(
                                     selected = isSelected,
-                                    enabled = true,
-                                    borderColor = CardBorderColor,
-                                    selectedBorderColor = PatagonianTeal,
-                                    disabledBorderColor = CardBorderColor
-                                ),
-                                shape = RoundedCornerShape(20.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("role_chip_$role")
-                            )
+                                    onClick = { 
+                                        activeRole = role
+                                        if (firebaseUser != null) {
+                                            viewModel.setPreferredRole(selectedUserId, role)
+                                        }
+                                    },
+                                    label = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = icon,
+                                                contentDescription = title,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = title,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                                            )
+                                        }
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors()
+                                        .copy(
+                                            selectedContainerColor = PatagonianTeal,
+                                            selectedLabelColor = Color.White,
+                                            containerColor = MaterialTheme.colorScheme.surface,
+                                            labelColor = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        selected = isSelected,
+                                        enabled = true,
+                                        borderColor = CardBorderColor,
+                                        selectedBorderColor = PatagonianTeal,
+                                        disabledBorderColor = CardBorderColor
+                                    ),
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("role_chip_$role")
+                                )
+                            }
                         }
                     }
                 }
@@ -966,6 +997,7 @@ fun SenderSectionLayout(
                             items(myShipments, key = { it.id }) { shipment ->
                                 SenderShipmentCard(
                                     shipment = shipment,
+                                    viewModel = viewModel,
                                     onClicked = { onItemClicked(shipment.id) },
                                     onChatClicked = { onChatClicked(shipment.id) }
                                 )
@@ -1018,6 +1050,7 @@ fun SenderSectionLayout(
 @Composable
 fun SenderShipmentCard(
     shipment: ShipmentEntity,
+    viewModel: PataCargoViewModel,
     onClicked: () -> Unit,
     onChatClicked: () -> Unit
 ) {
@@ -1052,7 +1085,7 @@ fun SenderShipmentCard(
                 }
                 
                 // Status Badge
-                StatusLabelBadge(status = shipment.status)
+                StatusLabelBadge(status = if (shipment.mpPaymentStatus == "PENDIENTE") "PAGO_PENDIENTE" else shipment.status)
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -1125,17 +1158,98 @@ fun SenderShipmentCard(
                 }
             }
 
-            // Simple notification helper if pending and has offers
-            if (shipment.status == "PENDIENTE") {
-                Spacer(modifier = Modifier.height(6.dp))
-                HorizontalDivider(color = CardBorderColor)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "👉 Toca para ver propuestas de viajeros disponibles",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = SunsetGold
-                )
+            if (shipment.mpPaymentStatus == "PENDIENTE") {
+                Spacer(modifier = Modifier.height(10.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = SunsetGold.copy(alpha = 0.12f)),
+                    border = BorderStroke(1.dp, SunsetGold.copy(0.4f))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Lock, contentDescription = null, tint = SunsetGold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "RESERVA ESCROW PATA CARGO REQUERIDA",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SunsetGold
+                            )
+                        }
+                        Text(
+                            "Para que los portadores de la región puedan ver e interceptar tu envío, debes respaldar los fondos en escrow mediante un pago real.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            lineHeight = 14.sp
+                        )
+
+                        var checkingPayment by remember { mutableStateOf(false) }
+                        val context = LocalContext.current
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val checkoutUrl = shipment.mpCheckoutUrl
+                                    if (!checkoutUrl.isNullOrEmpty()) {
+                                        try {
+                                            val i = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(checkoutUrl))
+                                            context.startActivity(i)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Error abriendo link: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Generando link en Mercado Pago...", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF009EE3)),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1f).height(36.dp)
+                            ) {
+                                Text("Pagar ARS", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                            }
+
+                            Button(
+                                onClick = {
+                                    checkingPayment = true
+                                    viewModel.verifyMercadoPagoPayment(shipment.id) { success, paymentId ->
+                                        checkingPayment = false
+                                        if (success) {
+                                            Toast.makeText(context, "¡Escrow abonado con éxito! ID de operación: $paymentId", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "Pago aún no acreditado en Mercado Pago.", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1.2f).height(36.dp),
+                                enabled = !checkingPayment
+                            ) {
+                                if (checkingPayment) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text("Verificar Pago", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Simple notification helper if pending and has offers
+                if (shipment.status == "PENDIENTE") {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HorizontalDivider(color = CardBorderColor)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "👉 Toca para ver propuestas de viajeros disponibles",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SunsetGold
+                    )
+                }
             }
         }
     }
@@ -1188,7 +1302,8 @@ fun RouteGeoVisualizer(origin: String, destination: String) {
 @Composable
 fun StatusLabelBadge(status: String) {
     val (backColor, textColor, text) = when (status) {
-        "PENDIENTE" -> Triple(Color(0xFFFEF3C7), Color(0xFFD97706), "Publicado")
+        "PENDIENTE" -> Triple(Color(0xFFFEF3C7), Color(0xFFD97706), "Aprobado")
+        "PAGO_PENDIENTE" -> Triple(Color(0xFFFEE2E2), Color(0xFFDC2626), "Esperando Pago Escrow 🔒")
         "ACEPTADO" -> Triple(Color(0xFFE0F2FE), Color(0xFF0369A1), "Match / Listo")
         "EN_VIAJE" -> Triple(Color(0xFFFEE2E2), CoralRed, "En Viaje")
         "ENTREGADO" -> Triple(Color(0xFFDCFCE7), ValleyGreen, "Entregado")
@@ -1534,6 +1649,7 @@ fun CarrierSectionLayout(
     val pendingShipments by viewModel.pendingShipments.collectAsStateWithLifecycle()
     val recommendedShipments by viewModel.recommendedShipments.collectAsStateWithLifecycle()
     val myCarrierJobShipments by viewModel.myCarrierShipments.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Pata Cargo Portadores Brand Banner
@@ -1597,10 +1713,22 @@ fun CarrierSectionLayout(
         }
 
         Box(modifier = Modifier.weight(1f)) {
+            val user = currentUser
             when (currentTab) {
                 "BUSCADOR" -> {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Section 1: Rutas Inteligentes Recommended Matches
+                    if (user != null && !user.isMercadoPagoConnected) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            MercadoPagoConnectionForm(viewModel = viewModel, userId = user.id)
+                        }
+                    } else {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Section 1: Rutas Inteligentes Recommended Matches
                         if (recommendedShipments.isNotEmpty()) {
                             Box(
                                 modifier = Modifier
@@ -1679,6 +1807,7 @@ fun CarrierSectionLayout(
                             }
                         }
                     }
+                }
                 }
                 "MIS_VIAJES" -> {
                     if (myCarrierJobShipments.isEmpty()) {
@@ -3156,6 +3285,131 @@ fun ActiveChatDialog(
     }
 }
 
+// REAL DYNAMIC QR CODE RENDERER (ZXING CANVAS BASED)
+@Composable
+fun QRCodeDisplay(text: String, modifier: Modifier = Modifier) {
+    val bitMatrix = remember(text) {
+        try {
+            com.google.zxing.qrcode.QRCodeWriter().encode(
+                text,
+                com.google.zxing.BarcodeFormat.QR_CODE,
+                150,
+                150
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .background(Color.White, RoundedCornerShape(12.dp))
+            .border(2.dp, PatagonianTeal, RoundedCornerShape(12.dp))
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitMatrix != null) {
+            val width = bitMatrix.width
+            val height = bitMatrix.height
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cellWidth = size.width / width
+                val cellHeight = size.height / height
+                for (x in 0 until width) {
+                    for (y in 0 until height) {
+                        if (bitMatrix.get(x, y)) {
+                            drawRect(
+                                color = Color.Black,
+                                topLeft = Offset(x * cellWidth, y * cellHeight),
+                                size = androidx.compose.ui.geometry.Size(cellWidth + 0.15f, cellHeight + 0.15f)
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            Icon(Icons.Filled.QrCode, contentDescription = null, tint = PatagonianTeal, modifier = Modifier.fillMaxSize(0.6f))
+        }
+    }
+}
+
+// CAMERAX LIVE CAMERA PREVIEW & ZXING QR SCANNER
+@Composable
+fun CameraQRScannerView(
+    onQRCodeScanned: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val cameraProviderFuture = remember { androidx.camera.lifecycle.ProcessCameraProvider.getInstance(context) }
+
+    AndroidView(
+        factory = { ctx ->
+            val previewView = androidx.camera.view.PreviewView(ctx).apply {
+                scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+            }
+            val executor = androidx.core.content.ContextCompat.getMainExecutor(ctx)
+
+            cameraProviderFuture.addListener({
+                try {
+                    val cameraProvider = cameraProviderFuture.get()
+                    val preview = androidx.camera.core.Preview.Builder().build().apply {
+                        surfaceProvider = previewView.surfaceProvider
+                    }
+
+                    val selector = androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA
+
+                    val imageAnalysis = androidx.camera.core.ImageAnalysis.Builder()
+                        .setBackpressureStrategy(androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+
+                    imageAnalysis.setAnalyzer(executor) { image ->
+                        try {
+                            val buffer = image.planes[0].buffer
+                            val bytes = ByteArray(buffer.remaining())
+                            buffer.get(bytes)
+
+                            val source = com.google.zxing.PlanarYUVLuminanceSource(
+                                bytes,
+                                image.width,
+                                image.height,
+                                0,
+                                0,
+                                image.width,
+                                image.height,
+                                false
+                            )
+                            val binaryBitmap = com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(source))
+                            val result = com.google.zxing.qrcode.QRCodeReader().decode(binaryBitmap)
+                            if (result != null && result.text.isNotEmpty()) {
+                                previewView.post {
+                                    onQRCodeScanned(result.text)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // ignore decode exceptions of frames
+                        } finally {
+                            image.close()
+                        }
+                    }
+
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        selector,
+                        preview,
+                        imageAnalysis
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }, executor)
+
+            previewView
+        },
+        modifier = modifier
+    )
+}
+
 // EASY QR SCAN BYPASS AND CHEAT DIALOG
 @Composable
 fun QRScannerCodeDialog(
@@ -3178,6 +3432,18 @@ fun QRScannerCodeDialog(
             simulatedFullValue = value
             simpleWordKey = value.removePrefix("COLL-").removePrefix("DELI-")
         }
+    }
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
     }
 
     AlertDialog(
@@ -3206,32 +3472,105 @@ fun QRScannerCodeDialog(
                     color = Color.DarkGray
                 )
 
-                // Interactive simulated container drawing
+                if (hasCameraPermission) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(2.dp, PatagonianTeal, RoundedCornerShape(12.dp))
+                    ) {
+                        CameraQRScannerView(
+                            onQRCodeScanned = { scannedText ->
+                                checkScanCode = scannedText
+                                Toast.makeText(context, "¡QR Escaneado!: $scannedText", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(110.dp)
+                                    .border(2.dp, PatagonianTeal, RoundedCornerShape(4.dp))
+                            )
+                            
+                            Box(
+                                modifier = Modifier
+                                    .width(110.dp)
+                                    .height(2.dp)
+                                    .background(SunsetGold)
+                                    .align(Alignment.Center)
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(LightBackground, RoundedCornerShape(12.dp))
+                            .border(1.dp, CardBorderColor, RoundedCornerShape(12.dp))
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Filled.PhotoCamera, contentDescription = null, tint = SlateGrey, modifier = Modifier.size(36.dp))
+                        
+                        Text(
+                            text = "Acceso a Cámara Desactivado 📷",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                        Text(
+                            text = "Concede acceso a la cámara para habilitar el escáner QR real en tu portador de cargas.",
+                            fontSize = 10.sp,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                        
+                        Button(
+                            onClick = { launcher.launch(Manifest.permission.CAMERA) },
+                            colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("Activar Escáner Cámara", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(130.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LightBackground)
-                        .border(1.dp, CardBorderColor, RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(TealLight)
+                        .border(1.dp, PatagonianTeal.copy(0.2f), RoundedCornerShape(10.dp))
+                        .padding(10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.QrCode, contentDescription = null, tint = PatagonianTeal, modifier = Modifier.size(44.dp))
-                        Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Key, contentDescription = null, tint = PatagonianTeal, modifier = Modifier.size(24.dp))
                         
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("CÓDIGO QR COMPLETO:", fontSize = 8.sp, color = Color.Gray)
-                                Text(simulatedFullValue, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
-                            }
-                            
-                            Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.LightGray))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("PALABRA CLAVE:", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Text(simpleWordKey, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = SunsetGold)
+                        }
 
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("PALABRA CLAVE (4 LETRAS):", fontSize = 8.sp, color = Color.Gray)
-                                Text(simpleWordKey, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = SunsetGold)
-                            }
+                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.LightGray))
+
+                        Column {
+                            Text("QR COMPLETO:", fontSize = 8.sp, color = Color.Gray)
+                            Text(simulatedFullValue, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
                         }
                     }
                 }
@@ -3245,7 +3584,10 @@ fun QRScannerCodeDialog(
                         .fillMaxWidth()
                         .testTag("scan_input_verify"),
                     shape = RoundedCornerShape(10.dp),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PatagonianTeal
+                    )
                 )
 
                 Button(
@@ -3439,19 +3781,25 @@ fun ShipmentDetailAndOfferDialog(
                             color = Color.Gray
                         )
 
-                        Box(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(LightBackground),
-                            contentAlignment = Alignment.Center
+                                .background(LightBackground, RoundedCornerShape(12.dp))
+                                .border(1.dp, CardBorderColor, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.QrCode, contentDescription = null, modifier = Modifier.size(48.dp))
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("Código:", fontSize = 9.sp, color = Color.Gray)
-                                Text(shipment.qrValueCollection, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+                            QRCodeDisplay(
+                                text = shipment.qrValueCollection,
+                                modifier = Modifier.size(100.dp)
+                            )
+                            Column {
+                                Text("CÓDIGO DE RETIRO:", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                Text(shipment.qrValueCollection, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("PALABRA CLAVE:", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                Text(shipment.qrValueCollection.removePrefix("COLL-"), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = SunsetGold)
                             }
                         }
                     }
@@ -3468,19 +3816,25 @@ fun ShipmentDetailAndOfferDialog(
                             color = Color.Gray
                         )
                         
-                        Box(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(LightBackground),
-                            contentAlignment = Alignment.Center
+                                .background(LightBackground, RoundedCornerShape(12.dp))
+                                .border(1.dp, CardBorderColor, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.QrCode, contentDescription = null, modifier = Modifier.size(48.dp))
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("Código de Entrega:", fontSize = 9.sp, color = Color.Gray)
-                                Text(shipment.qrValueDelivery, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SunsetGold)
+                            QRCodeDisplay(
+                                text = shipment.qrValueDelivery,
+                                modifier = Modifier.size(100.dp)
+                            )
+                            Column {
+                                Text("CÓDIGO DE ENTREGA:", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                Text(shipment.qrValueDelivery, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("PALABRA CLAVE RECEPTOR:", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                Text(shipment.qrValueDelivery.removePrefix("DELI-"), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = SunsetGold)
                             }
                         }
 
@@ -4095,4 +4449,140 @@ fun getSigningCertificateSHA1(context: android.content.Context): String {
         return "Error al extraer SHA-1: ${e.localizedMessage}"
     }
     return "SHA-1 no disponible"
+}
+
+@Composable
+fun MercadoPagoConnectionForm(
+    viewModel: PataCargoViewModel,
+    userId: String
+) {
+    var emailInput by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    val mpColor = Color(0xFF009EE3)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, mpColor.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Icon / Logo
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(mpColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AccountBalanceWallet,
+                    contentDescription = "Mercado Pago",
+                    tint = mpColor,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            Text(
+                text = "VINCULAR CUENTA MERCADO PAGO",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = mpColor,
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = "Como Portador de Pata Cargo, cobras tus fletes y comisiones mediante Mercado Pago. Para garantizar que tu cuenta sea real y válida para recibir dinero de la garantía (escrow), ingresa tu correo de cuenta de Mercado Pago vinculada.",
+                fontSize = 11.5.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp
+            )
+
+            OutlinedTextField(
+                value = emailInput,
+                onValueChange = { 
+                    emailInput = it
+                    errorMessage = null 
+                },
+                label = { Text("Correo de Mercado Pago") },
+                placeholder = { Text("ejemplo@mercadopago.com") },
+                singleLine = true,
+                isError = errorMessage != null,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Email,
+                        contentDescription = null,
+                        tint = mpColor.copy(alpha = 0.6f)
+                    )
+                }
+            )
+
+            if (errorMessage != null) {
+                Text(
+                    text = errorMessage ?: "",
+                    color = CoralRed,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+            }
+
+            if (successMessage != null) {
+                Text(
+                    text = successMessage ?: "",
+                    color = ValleyGreen,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (loading) {
+                CircularProgressIndicator(color = mpColor)
+            } else {
+                Button(
+                    onClick = {
+                        if (emailInput.isBlank()) {
+                            errorMessage = "Por favor ingresa tu correo de Mercado Pago."
+                            return@Button
+                        }
+                        loading = true
+                        viewModel.connectMercadoPagoAccount(userId, emailInput.trim()) { success, err ->
+                            loading = false
+                            if (success) {
+                                successMessage = "¡Cuenta de Mercado Pago vinculada y validada en tiempo real!"
+                                Toast.makeText(context, "Mercado Pago vinculado con éxito", Toast.LENGTH_SHORT).show()
+                            } else {
+                                errorMessage = err ?: "No se pudo vincular la cuenta."
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = mpColor),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                ) {
+                    Text("Vincular y Validar Cuenta Real", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        }
+    }
 }

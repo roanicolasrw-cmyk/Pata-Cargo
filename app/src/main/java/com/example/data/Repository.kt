@@ -17,7 +17,7 @@ class Repository(private val context: Context) {
             context.applicationContext,
             AppDatabase::class.java,
             "pata_cargo_database"
-        ).build()
+        ).fallbackToDestructiveMigration().build()
     }
 
     val userDao by lazy { db.userDao() }
