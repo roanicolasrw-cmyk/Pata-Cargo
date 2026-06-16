@@ -59,13 +59,14 @@ data class ShipmentEntity(
     var timestamp: Long = System.currentTimeMillis(),
     var mpPreferenceId: String? = null,
     var mpCheckoutUrl: String? = null,
-    var mpPaymentStatus: String = "PENDIENTE"
+    var mpPaymentStatus: String = "PENDIENTE",
+    var lastCheckpoint: String = ""
 ) : Serializable {
     // Constructor explícito sin argumentos para Firebase/Firestore
     constructor() : this(
         0, "", "", "", "", "", false, "", "PENDIENTE", 
         0.0, 0.0, false, 0.0, "", null, "", "", System.currentTimeMillis(),
-        null, null, "PENDIENTE"
+        null, null, "PENDIENTE", ""
     )
 }
 

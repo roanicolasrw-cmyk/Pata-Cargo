@@ -2080,18 +2080,102 @@ fun ActiveCarrierJobCard(
                             }
                         }
                         "EN_VIAJE" -> {
-                            Button(
-                                onClick = onScanDelivery,
-                                colors = ButtonDefaults.buttonColors(containerColor = SunsetGold),
-                                contentPadding = PaddingValues(horizontal = 14.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .height(36.dp)
-                                    .testTag("scan_deliver_btn")
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalAlignment = Alignment.End
                             ) {
-                                Icon(Icons.Filled.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Entregar (QR)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                // Dynamic Checkpoint Box for Carrier
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = TealLight.copy(0.4f)),
+                                    border = BorderStroke(1.dp, PatagonianTeal.copy(0.2f))
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Filled.Navigation, contentDescription = null, tint = PatagonianTeal, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Ubicación Reportada Activa", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+                                        }
+                                        
+                                        val lastLoc = if (shipment.lastCheckpoint.isEmpty()) "Sin reportes aún (En ruta de origen)" else shipment.lastCheckpoint
+                                        Text(
+                                            text = lastLoc,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        
+                                        var showCheckpointDialog by remember { mutableStateOf(false) }
+                                        
+                                        Button(
+                                            onClick = { showCheckpointDialog = true },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = PatagonianTeal),
+                                            border = BorderStroke(1.dp, PatagonianTeal),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(26.dp)
+                                        ) {
+                                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(11.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Actualizar ubicación", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        if (showCheckpointDialog) {
+                                            var checkpointInput by remember { mutableStateOf("") }
+                                            AlertDialog(
+                                                onDismissRequest = { showCheckpointDialog = false },
+                                                title = { Text("Reportar Ubicación de Tránsito", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
+                                                text = {
+                                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Text("Describe tu hito o posición del viaje por carretera (ej: 'Saliendo de Trelew por Ruta 3' o 'Pasando por Garayalde'). Los enviadores lo verán al instante.", fontSize = 11.sp, color = Color.Gray)
+                                                        OutlinedTextField(
+                                                            value = checkpointInput,
+                                                            onValueChange = { checkpointInput = it },
+                                                            placeholder = { Text("Ej: Pasando el empalme de Ruta 3 y 40") },
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        )
+                                                    }
+                                                },
+                                                confirmButton = {
+                                                    Button(
+                                                        onClick = {
+                                                            if (checkpointInput.trim().isNotEmpty()) {
+                                                                viewModel.updateShipmentCheckpoint(shipment.id, checkpointInput.trim())
+                                                            }
+                                                            showCheckpointDialog = false
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        Text("Actualizar", fontWeight = FontWeight.Bold)
+                                                    }
+                                                },
+                                                dismissButton = {
+                                                    TextButton(onClick = { showCheckpointDialog = false }) {
+                                                        Text("Cancelar", color = Color.Gray)
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Button(
+                                    onClick = onScanDelivery,
+                                    colors = ButtonDefaults.buttonColors(containerColor = SunsetGold),
+                                    contentPadding = PaddingValues(horizontal = 14.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .testTag("scan_deliver_btn")
+                                ) {
+                                    Icon(Icons.Filled.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Entregar (QR)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -3733,6 +3817,103 @@ fun QRScannerCodeDialog(
     )
 }
 
+// DECORATIVE LOGISTIC STEPPING MAP FOR LOGISTICS VISUALS
+@Composable
+fun LogisticTimelineStepper(shipment: ShipmentEntity) {
+    val steps = listOf("Creado", "Escrow", "Tránsito", "Entregado")
+    
+    // Determine active step index
+    val activeStep = when (shipment.status) {
+        "PENDIENTE" -> {
+            if (shipment.mpPaymentStatus == "APPROVED" || shipment.mpPaymentStatus == "approved") 1 else 0
+        }
+        "ACEPTADO" -> 1
+        "EN_VIAJE" -> 2
+        "ENTREGADO" -> 3
+        else -> 0
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = LightBackground),
+        border = BorderStroke(1.dp, CardBorderColor)
+    ) {
+        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("PROGRESO GLOBAL DEL ENVÍO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                steps.forEachIndexed { index, stepName ->
+                    val isCompleted = index <= activeStep
+                    val isCurrent = index == activeStep
+                    
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        // Icon circle
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isCurrent -> PatagonianTeal
+                                        isCompleted -> ValleyGreen
+                                        else -> Color.LightGray.copy(alpha = 0.4f)
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isCompleted && !isCurrent) {
+                                Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                            } else {
+                                Text(
+                                    text = (index + 1).toString(),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (isCurrent) Color.White else Color.Gray
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(2.dp))
+                        
+                        Text(
+                            text = stepName,
+                            fontSize = 8.sp,
+                            fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Medium,
+                            color = when {
+                                isCurrent -> PatagonianTeal
+                                isCompleted -> ValleyGreen
+                                else -> Color.Gray
+                            },
+                            maxLines = 1
+                        )
+                    }
+                    
+                    // Connected line
+                    if (index < steps.size - 1) {
+                        Box(
+                            modifier = Modifier
+                                .width(8.dp)
+                                .height(2.dp)
+                                .background(
+                                    if (index < activeStep) ValleyGreen else Color.LightGray.copy(alpha = 0.4f)
+                                )
+                                .align(Alignment.CenterVertically)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 // SENDER DIALOG FOR DETAILS / OFFERS LIST OR REVIEWS
 @Composable
 fun ShipmentDetailAndOfferDialog(
@@ -3761,6 +3942,9 @@ fun ShipmentDetailAndOfferDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Stepper
+                LogisticTimelineStepper(shipment = shipment)
+
                 // Route details
                 RouteGeoVisualizer(origin = shipment.origin, destination = shipment.destination)
 
@@ -3912,7 +4096,27 @@ fun ShipmentDetailAndOfferDialog(
                             fontSize = 11.sp,
                             color = Color.Gray
                         )
-                        
+
+                        // Checkpoint Box
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = PatagonianTeal.copy(0.06f)),
+                            border = BorderStroke(1.dp, PatagonianTeal.copy(0.3f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.LocalShipping, contentDescription = null, tint = PatagonianTeal, modifier = Modifier.size(20.dp))
+                                Column {
+                                    Text("LOCALIZACIÓN ACTUAL DEL ENVÍO:", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                    val lastLoc = if (shipment.lastCheckpoint.isEmpty()) "El portador inició el viaje (En ruta hacia destino)" else shipment.lastCheckpoint
+                                    Text(lastLoc, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
+                                }
+                            }
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()

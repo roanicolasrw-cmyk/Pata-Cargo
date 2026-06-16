@@ -1079,4 +1079,28 @@ class PataCargoViewModel(application: Application) : AndroidViewModel(applicatio
             carrierUnderSelfieVerification.value = null
         }
     }
+
+    fun updateShipmentCheckpoint(shipmentId: Int, checkpointText: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val shipment = repository.shipmentDao.getShipmentById(shipmentId)
+            if (shipment != null) {
+                val updated = shipment.copy(lastCheckpoint = checkpointText)
+                repository.shipmentDao.insertShipment(updated)
+                pushToFirestore("shipments", shipmentId.toString(), updated)
+                
+                // Add system message to the chat
+                val randomId = (100000..999999).random()
+                val systemMsg = ChatMessageEntity(
+                    id = randomId,
+                    shipmentId = shipmentId,
+                    senderId = "system",
+                    senderName = "🚚 Pata Cargo (Tránsito)",
+                    message = "Nuevo reporte de ubicación: $checkpointText",
+                    timestamp = System.currentTimeMillis()
+                )
+                repository.chatMessageDao.insertMessage(systemMsg)
+                pushToFirestore("chat_messages", systemMsg.id.toString(), systemMsg)
+            }
+        }
+    }
 }
