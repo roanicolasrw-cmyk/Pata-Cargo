@@ -1766,6 +1766,7 @@ fun CarrierSectionLayout(
                                     CarrierShipmentSearchCard(
                                         shipment = s,
                                         isRecommended = true,
+                                        viewModel = viewModel,
                                         onSelected = { onPlaceOfferClicked(s) }
                                     )
                                 }
@@ -1801,6 +1802,7 @@ fun CarrierSectionLayout(
                                     CarrierShipmentSearchCard(
                                         shipment = s,
                                         isRecommended = false,
+                                        viewModel = viewModel,
                                         onSelected = { onPlaceOfferClicked(s) }
                                     )
                                 }
@@ -1828,6 +1830,7 @@ fun CarrierSectionLayout(
                             items(myCarrierJobShipments, key = { it.id }) { s ->
                                 ActiveCarrierJobCard(
                                     shipment = s,
+                                    viewModel = viewModel,
                                     onScanCollection = { onScanCollection(s.id) },
                                     onScanDelivery = { onScanDelivery(s.id) },
                                     onChat = { onChatClicked(s.id) }
@@ -1848,8 +1851,19 @@ fun CarrierSectionLayout(
 fun CarrierShipmentSearchCard(
     shipment: ShipmentEntity,
     isRecommended: Boolean,
+    viewModel: PataCargoViewModel,
     onSelected: () -> Unit
 ) {
+    val senderState = produceState<UserEntity?>(initialValue = null, key1 = shipment.senderId) {
+        value = viewModel.repository.userDao.getUserById(shipment.senderId)
+    }
+    val completedCountState = produceState(initialValue = 0, key1 = shipment.senderId) {
+        value = viewModel.repository.shipmentDao.getCompletedCountForSender(shipment.senderId)
+    }
+
+    val sender = senderState.value
+    val completedCount = completedCountState.value
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1907,6 +1921,47 @@ fun CarrierShipmentSearchCard(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                Icon(Icons.Filled.Person, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(13.dp))
+                Text(
+                    text = "Enviador: ${sender?.name ?: "Cargador Comuna"}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Gray
+                )
+                
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(Icons.Filled.Star, contentDescription = null, tint = SunsetGold, modifier = Modifier.size(13.dp))
+                val ratingStr = if (sender != null && sender.rating > 0f) String.format("%.1f", sender.rating) else "5.0"
+                Text(
+                    text = ratingStr,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SunsetGold
+                )
+
+                Spacer(modifier = Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ValleyGreen.copy(0.12f))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "$completedCount exitosos ✓",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ValleyGreen
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             RouteGeoVisualizer(origin = shipment.origin, destination = shipment.destination)
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1938,6 +1993,7 @@ fun CarrierShipmentSearchCard(
 @Composable
 fun ActiveCarrierJobCard(
     shipment: ShipmentEntity,
+    viewModel: PataCargoViewModel,
     onScanCollection: () -> Unit,
     onScanDelivery: () -> Unit,
     onChat: () -> Unit
@@ -2039,6 +2095,87 @@ fun ActiveCarrierJobCard(
                             }
                         }
                     }
+                }
+            }
+
+            // If ENTREGADO, show Rate Sender options
+            if (shipment.status == "ENTREGADO") {
+                var showRateSenderDialog by remember { mutableStateOf(false) }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = { showRateSenderDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = PatagonianTeal),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(36.dp)
+                ) {
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = SunsetGold, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Calificar al Enviador ⭐", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                if (showRateSenderDialog) {
+                    var stars by remember { mutableIntStateOf(5) }
+                    var comment by remember { mutableStateOf("Excelente comunicación, muy amable y puntual.") }
+                    val context = LocalContext.current
+
+                    AlertDialog(
+                        onDismissRequest = { showRateSenderDialog = false },
+                        title = { Text("Calificar al Enviador de Carga", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Aporta una valoración honesta sobre este cliente para cuidar la reputación de la comarca.", fontSize = 11.sp, color = Color.Gray)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    (1..5).forEach { index ->
+                                        IconButton(onClick = { stars = index }) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Star,
+                                                contentDescription = "$index Estrellas",
+                                                tint = if (index <= stars) SunsetGold else Color.LightGray,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = comment,
+                                    onValueChange = { comment = it },
+                                    label = { Text("Comentario/Reseña del enviador") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    viewModel.submitReview(
+                                        shipmentId = shipment.id,
+                                        rating = stars,
+                                        comment = comment,
+                                        writerId = shipment.carrierId ?: "",
+                                        targetId = shipment.senderId
+                                    )
+                                    showRateSenderDialog = false
+                                    Toast.makeText(context, "¡Calificación de Enviador registrada!", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ValleyGreen),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Guardar Calificación", fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showRateSenderDialog = false }) {
+                                Text("Cancelar", color = Color.Gray)
+                            }
+                        }
+                    )
                 }
             }
 
@@ -3546,40 +3683,11 @@ fun QRScannerCodeDialog(
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(TealLight)
-                        .border(1.dp, PatagonianTeal.copy(0.2f), RoundedCornerShape(10.dp))
-                        .padding(10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.Key, contentDescription = null, tint = PatagonianTeal, modifier = Modifier.size(24.dp))
-                        
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("PALABRA CLAVE:", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                            Text(simpleWordKey, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = SunsetGold)
-                        }
-
-                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.LightGray))
-
-                        Column {
-                            Text("QR COMPLETO:", fontSize = 8.sp, color = Color.Gray)
-                            Text(simulatedFullValue, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PatagonianTeal)
-                        }
-                    }
-                }
-
                 OutlinedTextField(
                     value = checkScanCode,
                     onValueChange = { checkScanCode = it },
                     label = { Text("Palabra clave o código QR") },
-                    placeholder = { Text("Ej: $simpleWordKey") },
+                    placeholder = { Text("Escribe la palabra clave (ej: COPA) o escanea el QR") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("scan_input_verify"),
@@ -3589,17 +3697,6 @@ fun QRScannerCodeDialog(
                         focusedBorderColor = PatagonianTeal
                     )
                 )
-
-                Button(
-                    onClick = {
-                        checkScanCode = simpleWordKey
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = TealLight, contentColor = PatagonianTeal),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Auto-completar palabra clave ✨ (Simular)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
             }
         },
         confirmButton = {

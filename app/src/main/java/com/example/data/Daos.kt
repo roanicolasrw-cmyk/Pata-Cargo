@@ -50,6 +50,9 @@ interface ShipmentDao {
     @Query("SELECT * FROM shipments WHERE senderId = :senderId ORDER BY timestamp DESC")
     fun getShipmentsBySenderFlow(senderId: String): Flow<List<ShipmentEntity>>
 
+    @Query("SELECT COUNT(*) FROM shipments WHERE senderId = :senderId AND status = 'ENTREGADO'")
+    suspend fun getCompletedCountForSender(senderId: String): Int
+
     @Query("SELECT * FROM shipments WHERE carrierId = :carrierId ORDER BY timestamp DESC")
     fun getShipmentsByCarrierFlow(carrierId: String): Flow<List<ShipmentEntity>>
 
