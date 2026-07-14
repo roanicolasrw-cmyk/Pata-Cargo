@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:14033808612:android:f3bed76568f3411e1310f1",
         "android_client_info": {
-          "package_name": "com.aistudio.patacargo.virchm"
+          "package_name": "com.patacargo.virchm"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "14033808612-al94kmkdjiha17m64j6p1gpsdv8rdje3.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.aistudio.patacargo.virchm",
+            "package_name": "com.patacargo.virchm",
             "certificate_hash": "d1e065e6759f1076ef450bccaadafe699d6c4d53"
           }
         },

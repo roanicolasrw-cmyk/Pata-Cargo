@@ -13,7 +13,7 @@ android {
   compileSdk = 35
 
   defaultConfig {
-    applicationId = "com.aistudio.patacargo.virchm"
+    applicationId = "com.patacargo.virchm"
     minSdk = 24
     targetSdk = 35
     versionCode = 1
@@ -70,8 +70,6 @@ secrets {
   defaultPropertiesFileName = ".env.example"
 }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
@@ -102,7 +100,6 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
-  // implementation(libs.firebase.ai)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
