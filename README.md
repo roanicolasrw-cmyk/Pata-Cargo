@@ -1,106 +1,84 @@
-# Pata Cargo - Logística Colaborativa (VIRCH & Madryn)
+# Pata Cargo - Logística Colaborativa Regional
 
-**Pata Cargo** es una plataforma móvil innovadora diseñada para transformar la logística en la región del Valle Inferior del Río Chubut (VIRCH) y Puerto Madryn. La aplicación facilita el transporte de paquetes aprovechando los viajes habituales de los ciudadanos, integrando seguridad, pagos digitales y una experiencia de usuario moderna.
-
----
-
-## ✍️ Autoría
-Este proyecto ha sido desarrollado íntegramente por el usuario de esta cuenta. 
-Demuestra habilidades avanzadas en desarrollo Android moderno, integración de servicios financieros y diseño de sistemas de confianza descentralizada.
+**Pata Cargo** es una solución móvil de logística *last-mile* diseñada para la región del VIRCH y Puerto Madryn. La plataforma optimiza el transporte de paquetes conectando a usuarios con conductores particulares que realizan rutas habituales, integrando un sistema de pagos seguro y validación de identidad.
 
 ---
 
-## 🚀 Tecnologías Utilizadas
+## 💎 Valor Técnico y Arquitectura
 
-- **Lenguaje:** [Kotlin](https://kotlinlang.org/) (100%)
-- **UI Framework:** [Jetpack Compose](https://developer.android.com/jetpack/compose) - Interfaz declarativa de última generación.
-- **Arquitectura:** MVVM (Model-View-ViewModel) siguiendo principios de Clean Architecture.
-- **Base de Datos:** [Room](https://developer.android.com/training/data-storage/room) - Persistencia local eficiente.
-- **Backend & Auth:** [Firebase](https://firebase.google.com/) (Authentication, Firestore).
-- **Pasarela de Pagos:** [Mercado Pago SDK](https://www.mercadopago.com.ar/developers/) - Gestión de pagos y sistema de Escrow (Garantía).
-- **Hardware & Multimedia:**
-  - [CameraX](https://developer.android.com/training/camerax) para escaneo de códigos en tiempo real.
-  - [ZXing](https://github.com/zxing/zxing) para la generación dinámica de códigos QR.
-- **Inyección de Dependencias:** Gestión de estado robusta mediante ViewModels y el patrón Repository.
-- **Concurrencia:** [Kotlin Coroutines](https://kotlinlang.org/docs/coroutines-overview.html) & Flow para flujos de datos asíncronos.
+Este proyecto demuestra el dominio de estándares de desarrollo Android modernos y la resolución de problemas complejos:
+
+*   **Arquitectura:** Clean Architecture con patrón **MVVM** (Model-View-ViewModel).
+*   **Offline-First:** Sincronización robusta entre **Firebase Firestore** y persistencia local con **Room**.
+*   **Seguridad Financiera:** Implementación de flujo **Escrow** (Garantía de pago) mediante el SDK de **Mercado Pago**, donde el dinero solo se libera tras la validación mutua.
+*   **Interacción Digital:** Sistema de auditoría mediante generación y escaneo de **Códigos QR** (ZXing) para certificar entregas.
+*   **UI/UX:** Interfaz 100% declarativa con **Jetpack Compose** y Material Design 3.
 
 ---
 
-## 🏗️ Arquitectura y Patrones
+## 🛠️ Stack Tecnológico
 
-El proyecto implementa las mejores prácticas recomendadas por Google:
-- **UI Layer:** Componibles reactivos que consumen el estado del ViewModel.
-- **Domain Layer:** Lógica de negocio desacoplada en repositorios.
-- **Data Layer:** Gestión híbrida de datos (Firebase para nube, Room para caché local).
-- **Seguridad:** Validación biométrica simulada y encriptación de tokens de sesión.
-
----
-
-## 🛠️ Funcionalidades Principales
-
-### 📦 Para el Enviador (Sender)
-- **Publicación de Cargas:** Sistema intuitivo para describir paquetes y rutas.
-- **Calculador de Costos:** Estimación automática basada en tamaño, distancia y seguros.
-- **Garantía Escrow:** El pago solo se libera al transportista una vez confirmada la entrega.
-- **Validación por QR:** Generación de códigos únicos para certificar el retiro del paquete.
-
-### 🚚 Para el Portador (Carrier)
-- **Buscador por Corredores:** Filtros inteligentes para encontrar cargas en rutas frecuentes.
-- **Rutas Habituales:** Configuración de viajes diarios para emparejamiento automático.
-- **Validación Biométrica:** Sistema de selfie para verificar la identidad del portador.
-- **Billetera Digital:** Integración con Mercado Pago para cobros seguros y rápidos.
-
-### 🛡️ Panel de Administración (Admin)
-- **Gestión de Identidades:** Aprobación manual de portadores verificados.
-- **Auditoría de Fondos:** Monitoreo de transacciones y comisiones de plataforma.
-- **Resolución de Conflictos:** Canal para gestionar disputas entre usuarios.
+| Categoría | Tecnologías |
+| :--- | :--- |
+| **Lenguaje** | Kotlin + Coroutines & Flow |
+| **UI** | Jetpack Compose, Navigation Component, Material 3 |
+| **Persistencia** | Room Database, DataStore |
+| **Backend/Auth** | Firebase (Auth, Firestore, Storage) |
+| **Pagos** | Mercado Pago SDK (Checkout Pro) |
+| **Hardware** | CameraX (Escaneo QR), Biometría |
+| **Dependencias** | Retrofit2, OkHttp3, Moshi, KSP |
 
 ---
 
-## 📸 Capturas de Pantalla
-> Las capturas de pantalla se encuentran en la carpeta `/assets/screenshots`.
+## 🚀 Funcionalidades Destacadas
 
-*(Próximamente: Galería de imágenes)*
+### 📦 Módulo de Envío (Sender)
+*   **Publicación Inteligente:** Flujo dinámico para descripción de carga y seguros.
+*   **Gestión de Garantías:** Integración con pasarela de pagos para retención de fondos segura.
+*   **Certificación QR:** Generación de token único para validación de retiro.
+
+### 🚚 Módulo de Transporte (Carrier)
+*   **Matching por Corredores:** Algoritmo de filtrado para encontrar cargas en rutas específicas.
+*   **Billetera Digital:** Visualización de saldos y gestión de cobros realizados.
+*   **Identidad Verificada:** Sistema de selfie-check para validación de portadores (Simulado).
+
+### 🛡️ Panel de Control (Admin)
+*   Dashboard para la moderación de usuarios, auditoría de transacciones y resolución de disputas.
 
 ---
 
-## 🎥 Video Demostración
-Se puede encontrar un video con el flujo completo de la aplicación en la carpeta `/assets/video`.
+## 📸 Demostración Visual
+> [!TIP]
+> Puedes ver capturas de pantalla del flujo completo en la carpeta `/assets/screenshots`.
+
+*(Insertar aquí GIF del flujo principal: Publicación -> Pago -> Entrega)*
 
 ---
 
-## ⚙️ Cómo ejecutar el proyecto
+## ⚙️ Configuración del Entorno
 
-1. **Clonar el repositorio:**
-   ```bash
-   git clone <url-del-repositorio>
-   ```
-2. **Prerrequisitos:**
-   - Android Studio Ladybug o superior.
-   - Archivo `google-services.json` configurado en la carpeta `/app`.
-3. **Configuración:**
-   - Sincronizar el proyecto con Gradle.
-   - Ejecutar en un dispositivo con API 24 o superior.
+1. **Clonar y Sincronizar:** Requiere Android Studio Ladybug+ y Gradle 8.7.
+2. **Firebase:** Colocar el archivo `google-services.json` en la carpeta `/app`.
+3. **Variables de Entorno:** Renombrar `.env.example` a `.env` y configurar las credenciales de Mercado Pago.
+4. **Build:** Ejecutar la tarea `:app:assembleDebug`.
 
 ---
 
 ## 📄 Estructura del Proyecto
 
-El proyecto sigue una organización modular por capas para facilitar el mantenimiento y la escalabilidad:
-
 ```text
-Pata-Cargo/
-├── app/
-│   └── src/main/java/com/patacargo/virchm/
-│       ├── api/            # Definiciones de Retrofit y Mercado Pago
-│       ├── data/           # Entidades Room, DAOs y Repositorio unificado
-│       ├── ui/
-│       │   ├── components/ # Widgets reutilizables (Logos, Badges, etc.)
-│       │   ├── dialogs/    # Ventanas emergentes de interacción
-│       │   ├── screens/    # Flujos por rol (Sender, Carrier, Admin)
-│       │   ├── theme/      # Definición de Material Design 3 (Colores, Tipografía)
-│       │   └── PataCargoViewModel.kt # Lógica de estado global
-│       └── MainActivity.kt # Punto de entrada y Shell de la app
-├── assets/                 # Recursos multimedia para el repositorio
-└── docs/                   # Documentación técnica adicional
+com.patacargo.virchm/
+├── api/            # Client y DTOs para servicios externos
+├── data/           # Repositorios, Room Entities y DAOs
+├── ui/
+│   ├── components/ # Atomic Design: componentes reutilizables
+│   ├── screens/    # Pantallas principales (Sender, Carrier, Admin)
+│   ├── theme/      # Definición de tokens de diseño (Material 3)
+│   └── PataCargoViewModel.kt # State Management global
+└── MainActivity.kt # Entry point y navegación
 ```
+
+---
+
+## ✍️ Autor
+**Nicolás R. W.** - Desarrollador Android enfocado en soluciones escalables y seguras.
