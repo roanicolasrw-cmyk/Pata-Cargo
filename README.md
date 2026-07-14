@@ -1,21 +1,95 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Pata Cargo - Logística Colaborativa (VIRCH & Madryn)
 
-# Run and deploy your AI Studio app
+**Pata Cargo** es una plataforma móvil innovadora diseñada para transformar la logística en la región del Valle Inferior del Río Chubut (VIRCH) y Puerto Madryn. La aplicación facilita el transporte de paquetes aprovechando los viajes habituales de los ciudadanos, integrando seguridad, pagos digitales y una experiencia de usuario moderna.
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/b1ed58b1-1d7d-44c3-bdad-55b305e328d1
+## ✍️ Autoría
+Este proyecto ha sido desarrollado íntegramente por el usuario de esta cuenta. 
+Demuestra habilidades avanzadas en desarrollo Android moderno, integración de servicios financieros y diseño de sistemas de confianza descentralizada.
 
-## Run Locally
+---
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+## 🚀 Tecnologías Utilizadas
 
+- **Lenguaje:** [Kotlin](https://kotlinlang.org/) (100%)
+- **UI Framework:** [Jetpack Compose](https://developer.android.com/jetpack/compose) - Interfaz declarativa de última generación.
+- **Arquitectura:** MVVM (Model-View-ViewModel) siguiendo principios de Clean Architecture.
+- **Base de Datos:** [Room](https://developer.android.com/training/data-storage/room) - Persistencia local eficiente.
+- **Backend & Auth:** [Firebase](https://firebase.google.com/) (Authentication, Firestore).
+- **Pasarela de Pagos:** [Mercado Pago SDK](https://www.mercadopago.com.ar/developers/) - Gestión de pagos y sistema de Escrow (Garantía).
+- **Hardware & Multimedia:**
+  - [CameraX](https://developer.android.com/training/camerax) para escaneo de códigos en tiempo real.
+  - [ZXing](https://github.com/zxing/zxing) para la generación dinámica de códigos QR.
+- **Inyección de Dependencias:** Gestión de estado robusta mediante ViewModels y el patrón Repository.
+- **Concurrencia:** [Kotlin Coroutines](https://kotlinlang.org/docs/coroutines-overview.html) & Flow para flujos de datos asíncronos.
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+---
+
+## 🏗️ Arquitectura y Patrones
+
+El proyecto implementa las mejores prácticas recomendadas por Google:
+- **UI Layer:** Componibles reactivos que consumen el estado del ViewModel.
+- **Domain Layer:** Lógica de negocio desacoplada en repositorios.
+- **Data Layer:** Gestión híbrida de datos (Firebase para nube, Room para caché local).
+- **Seguridad:** Validación biométrica simulada y encriptación de tokens de sesión.
+
+---
+
+## 🛠️ Funcionalidades Principales
+
+### 📦 Para el Enviador (Sender)
+- **Publicación de Cargas:** Sistema intuitivo para describir paquetes y rutas.
+- **Calculador de Costos:** Estimación automática basada en tamaño, distancia y seguros.
+- **Garantía Escrow:** El pago solo se libera al transportista una vez confirmada la entrega.
+- **Validación por QR:** Generación de códigos únicos para certificar el retiro del paquete.
+
+### 🚚 Para el Portador (Carrier)
+- **Buscador por Corredores:** Filtros inteligentes para encontrar cargas en rutas frecuentes.
+- **Rutas Habituales:** Configuración de viajes diarios para emparejamiento automático.
+- **Validación Biométrica:** Sistema de selfie para verificar la identidad del portador.
+- **Billetera Digital:** Integración con Mercado Pago para cobros seguros y rápidos.
+
+### 🛡️ Panel de Administración (Admin)
+- **Gestión de Identidades:** Aprobación manual de portadores verificados.
+- **Auditoría de Fondos:** Monitoreo de transacciones y comisiones de plataforma.
+- **Resolución de Conflictos:** Canal para gestionar disputas entre usuarios.
+
+---
+
+## 📸 Capturas de Pantalla
+> Las capturas de pantalla se encuentran en la carpeta `/assets/screenshots`.
+
+*(Próximamente: Galería de imágenes)*
+
+---
+
+## 🎥 Video Demostración
+Se puede encontrar un video con el flujo completo de la aplicación en la carpeta `/assets/video`.
+
+---
+
+## ⚙️ Cómo ejecutar el proyecto
+
+1. **Clonar el repositorio:**
+   ```bash
+   git clone <url-del-repositorio>
+   ```
+2. **Prerrequisitos:**
+   - Android Studio Ladybug o superior.
+   - Archivo `google-services.json` configurado en la carpeta `/app`.
+3. **Configuración:**
+   - Sincronizar el proyecto con Gradle.
+   - Ejecutar en un dispositivo con API 24 o superior.
+
+---
+
+## 📄 Estructura del Proyecto
+```text
+Pata-Cargo/
+├── app/                # Código fuente de la aplicación (Kotlin/Compose)
+├── docs/               # Documentación adicional
+└── assets/             # Recursos multimedia para el repositorio
+    ├── screenshots/    # Capturas de la UI
+    └── video/          # Demo del funcionamiento
+```
