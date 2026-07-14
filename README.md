@@ -85,11 +85,22 @@ Se puede encontrar un video con el flujo completo de la aplicación en la carpet
 ---
 
 ## 📄 Estructura del Proyecto
+
+El proyecto sigue una organización modular por capas para facilitar el mantenimiento y la escalabilidad:
+
 ```text
 Pata-Cargo/
-├── app/                # Código fuente de la aplicación (Kotlin/Compose)
-├── docs/               # Documentación adicional
-└── assets/             # Recursos multimedia para el repositorio
-    ├── screenshots/    # Capturas de la UI
-    └── video/          # Demo del funcionamiento
+├── app/
+│   └── src/main/java/com/patacargo/virchm/
+│       ├── api/            # Definiciones de Retrofit y Mercado Pago
+│       ├── data/           # Entidades Room, DAOs y Repositorio unificado
+│       ├── ui/
+│       │   ├── components/ # Widgets reutilizables (Logos, Badges, etc.)
+│       │   ├── dialogs/    # Ventanas emergentes de interacción
+│       │   ├── screens/    # Flujos por rol (Sender, Carrier, Admin)
+│       │   ├── theme/      # Definición de Material Design 3 (Colores, Tipografía)
+│       │   └── PataCargoViewModel.kt # Lógica de estado global
+│       └── MainActivity.kt # Punto de entrada y Shell de la app
+├── assets/                 # Recursos multimedia para el repositorio
+└── docs/                   # Documentación técnica adicional
 ```

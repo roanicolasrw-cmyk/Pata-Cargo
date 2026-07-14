@@ -21,8 +21,8 @@
 #-renamesourcefileattribute SourceFile
 
 # Firebase & Database Entity Preservation Rules
--keep class com.example.data.** { *; }
--keepclassmembers class com.example.data.** {
+-keep class com.patacargo.virchm.data.** { *; }
+-keepclassmembers class com.patacargo.virchm.data.** {
     <init>(...);
     <fields>;
     <methods>;

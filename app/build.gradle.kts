@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.patacargo.virchm"
   compileSdk = 35
 
   defaultConfig {
