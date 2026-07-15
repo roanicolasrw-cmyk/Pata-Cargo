@@ -63,10 +63,16 @@ La elección de Compose sobre el sistema de Views tradicional se debe a:
 ---
 
 ## 📸 Demostración Visual
-> [!TIP]
-> Puedes ver capturas de pantalla del flujo completo en la carpeta `/assets/screenshots`.
 
-*(Insertar aquí GIF del flujo principal: Publicación -> Pago -> Entrega)*
+<div align="center">
+  <img src="assets/screenshots/Enviador 1.jpeg" width="23%" alt="Pantalla de Envío 1" />
+  <img src="assets/screenshots/Enviador 2.jpeg" width="23%" alt="Pantalla de Envío 2" />
+  <img src="assets/screenshots/Enviador 3.jpeg" width="23%" alt="Pantalla de Envío 3" />
+  <img src="assets/screenshots/Inicio sesion protegida.jpeg" width="23%" alt="Pantalla de Login" />
+</div>
+
+> [!NOTE]
+> Para ver el flujo completo en detalle, puedes explorar la carpeta [assets/screenshots](assets/screenshots).
 
 ---
 
