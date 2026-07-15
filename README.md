@@ -1,105 +1,76 @@
-# Pata Cargo - Logística Colaborativa Regional
+# Pata Cargo - Logística Colaborativa (VIRCH & Puerto Madryn)
 
-**Pata Cargo** es una solución móvil de logística *last-mile* diseñada para la región del VIRCH y Puerto Madryn. La plataforma optimiza el transporte de paquetes conectando a usuarios con conductores particulares que realizan rutas habituales, integrando un sistema de pagos seguro y validación de identidad.
-
----
-
-## 🏗️ Decisiones de arquitectura
-
-Este proyecto fue desarrollado aplicando estándares de la industria para garantizar escalabilidad y mantenimiento:
-
-*   **Arquitectura:** Implementación de **Clean Architecture** dividida en capas (Data, Domain, UI) con el patrón **MVVM** (Model-View-ViewModel) para una separación de responsabilidades clara.
-*   **Offline-First:** Sincronización robusta entre **Firebase Firestore** y persistencia local con **Room**, permitiendo que la app funcione sin conexión.
-*   **Seguridad Financiera:** Flujo de pagos tipo **Escrow** (Garantía) integrado con el SDK de **Mercado Pago**. El dinero se retiene de forma segura y solo se libera cuando ambas partes validan la entrega mediante códigos únicos.
-*   **Validación Digital:** Auditoría mediante generación y escaneo de **Códigos QR** (ZXing) para certificar cada etapa del envío.
-*   **UI Declarativa:** Interfaz moderna construida íntegramente con **Jetpack Compose** y Material Design 3.
+**Pata Cargo** nace para solucionar la desconexión logística en la región del Valle Inferior del Río Chubut y Puerto Madryn, aprovechando el movimiento natural de las personas para transportar paquetes de forma segura, económica y confiable.
 
 ---
 
-## 🧐 Justificación Técnica
+## 🚩 El Problema
+En regiones con distancias considerables como el VIRCH, el envío de paquetes pequeños a través de servicios tradicionales suele ser:
+*   **Costoso:** Tarifas mínimas elevadas para envíos de corta distancia.
+*   **Lento:** Dependencia de horarios rígidos y centros de distribución.
+*   **Informal:** Muchos envíos se coordinan por redes sociales sin garantías de pago ni seguridad para el paquete.
 
-### ¿Por qué Firestore + Room?
-Se optó por una arquitectura híbrida para garantizar la disponibilidad de los datos:
-*   **Firestore** actúa como la fuente de verdad en la nube, gestionando el tiempo real necesario para el *matching* de cargas y transportistas.
-*   **Room** funciona como caché local y base de datos persistente, asegurando que el usuario pueda consultar sus envíos activos o su historial incluso en zonas de baja cobertura (común en rutas regionales).
+## 💡 La Solución
+Una plataforma móvil que conecta a **Enviadores** con **Portadores** (personas que ya tienen planeado viajar entre ciudades).
+*   **Seguridad:** Sistema de garantía (Escrow) donde el dinero se retiene hasta que el paquete es entregado.
+*   **Validación:** Uso de códigos QR únicos para confirmar el retiro y la recepción.
+*   **Confianza:** Validación de identidad y sistema de reputación para los portadores regionales.
 
-### ¿Por qué Jetpack Compose?
-La elección de Compose sobre el sistema de Views tradicional se debe a:
-*   **Productividad:** Reducción drástica de código *boilerplate* y errores de estado.
-*   **Consistencia:** Facilita la creación de un sistema de diseño coherente (Atomic Design) que se adapta dinámicamente a diferentes tamaños de pantalla.
-*   **Rendimiento:** Animaciones más fluidas y una gestión de estado reactiva que se integra perfectamente con Kotlin Coroutines y Flow.
+## 🏗️ Arquitectura del Sistema
+Para asegurar que la aplicación sea mantenible y escale, se aplicaron principios de **Clean Architecture**:
+*   **Capa de UI:** Implementada totalmente en **Jetpack Compose**, permitiendo una interfaz reactiva y moderna.
+*   **Capa de Dominio:** Lógica de negocio pura (Casos de uso) que no depende de librerías externas.
+*   **Capa de Datos:** Implementación del patrón **Repository** con una estrategia **Offline-First**, utilizando **Room** para caché local y **Firebase Firestore** para sincronización en tiempo real.
 
----
-
-## 🛠️ Stack Tecnológico
-
-| Categoría | Tecnologías |
-| :--- | :--- |
-| **Lenguaje** | Kotlin + Coroutines & Flow |
-| **UI** | Jetpack Compose, Navigation Component, Material 3 |
-| **Persistencia** | Room Database, DataStore |
-| **Backend/Auth** | Firebase (Auth, Firestore, Storage) |
-| **Pagos** | Mercado Pago SDK (Checkout Pro) |
-| **Hardware** | CameraX (Escaneo QR), Biometría |
-| **Dependencias** | Retrofit2, OkHttp3, Moshi, KSP |
+## 🛠️ Tecnologías Principales
+*   **Lenguaje:** Kotlin + Coroutines & Flow.
+*   **Persistencia:** Room (Local) & Firestore (Cloud).
+*   **Integraciones:** Mercado Pago SDK (Pagos), CameraX (QR), Firebase Auth.
 
 ---
 
-## 🚀 Funcionalidades Destacadas
-
-### 📦 Módulo de Envío (Sender)
-*   **Publicación Inteligente:** Flujo dinámico para descripción de carga y seguros.
-*   **Gestión de Garantías:** Integración con pasarela de pagos para retención de fondos segura.
-*   **Certificación QR:** Generación de token único para validación de retiro.
-
-### 🚚 Módulo de Transporte (Carrier)
-*   **Matching por Corredores:** Algoritmo de filtrado para encontrar cargas en rutas específicas.
-*   **Billetera Digital:** Visualización de saldos y gestión de cobros realizados.
-*   **Identidad Verificada:** Sistema de selfie-check para validación de portadores (Simulado).
-
-### 🛡️ Panel de Control (Admin)
-*   Dashboard para la moderación de usuarios, auditoría de transacciones y resolución de disputas.
-
----
-
-## 📸 Demostración Visual
-
+## 📸 Capturas de Pantalla
 <div align="center">
-  <img src="assets/screenshots/Enviador 1.jpeg" width="23%" alt="Pantalla de Envío 1" />
-  <img src="assets/screenshots/Enviador 2.jpeg" width="23%" alt="Pantalla de Envío 2" />
-  <img src="assets/screenshots/Enviador 3.jpeg" width="23%" alt="Pantalla de Envío 3" />
-  <img src="assets/screenshots/Inicio sesion protegida.jpeg" width="23%" alt="Pantalla de Login" />
+  <img src="assets/screenshots/Enviador 1.jpeg" width="23%" alt="Detalle de envío" />
+  <img src="assets/screenshots/Enviador 2.jpeg" width="23%" alt="Publicación" />
+  <img src="assets/screenshots/Enviador 3.jpeg" width="23%" alt="Gestión de carga" />
+  <img src="assets/screenshots/Inicio sesion protegida.jpeg" width="23%" alt="Seguridad" />
 </div>
 
-> [!NOTE]
-> Para ver el flujo completo en detalle, puedes explorar la carpeta [assets/screenshots](assets/screenshots).
+## 🎥 Video Demostración
+> [!IMPORTANT]
+> Puedes encontrar una demo en video del flujo completo en la carpeta `assets/video` (o [haz clic aquí si está disponible en línea]).
 
 ---
 
-## ⚙️ Configuración del Entorno
+## 🧐 Decisiones Técnicas: ¿Por qué construí esto así?
 
-1. **Clonar y Sincronizar:** Requiere Android Studio Ladybug+ y Gradle 8.7.
-2. **Firebase:** Colocar el archivo `google-services.json` en la carpeta `/app`.
-3. **Variables de Entorno:** Renombrar `.env.example` a `.env` y configurar las credenciales de Mercado Pago.
-4. **Build:** Ejecutar la tarea `:app:assembleDebug`.
+### ¿Por qué Firestore + Room?
+La conectividad en las rutas de la Patagonia puede ser inestable. Elegí **Room** para que los usuarios siempre puedan ver sus envíos activos sin señal, y **Firestore** para gestionar el "matching" de cargas en tiempo real cuando recuperan la conexión.
+
+### ¿Por qué Mercado Pago (Escrow)?
+Para resolver la desconfianza entre desconocidos, implementé un flujo de **Garantía**. El enviador paga al publicar, el dinero queda a resguardo de la plataforma, y solo se libera al portador cuando el enviador escanea el QR de entrega exitosa.
+
+### ¿Por qué Jetpack Compose?
+Buscaba rapidez en el desarrollo de una UI compleja. Compose me permitió crear componentes reutilizables (como el selector de rutas) con mucho menos código que el sistema de Views tradicional, facilitando las animaciones y transiciones entre estados.
 
 ---
 
-## 📄 Estructura del Proyecto
-
-```text
-com.patacargo.virchm/
-├── api/            # Client y DTOs para servicios externos
-├── data/           # Repositorios, Room Entities y DAOs
-├── ui/
-│   ├── components/ # Atomic Design: componentes reutilizables
-│   ├── screens/    # Pantallas principales (Sender, Carrier, Admin)
-│   ├── theme/      # Definición de tokens de diseño (Material 3)
-│   └── PataCargoViewModel.kt # State Management global
-└── MainActivity.kt # Entry point y navegación
-```
+## 🗺️ Roadmap / Próximos Pasos
+- [ ] Implementación de notificaciones Push para actualizaciones de estado.
+- [ ] Sistema de tracking en tiempo real mediante GPS.
+- [ ] Verificación de identidad mediante biometría facial real.
+- [ ] Panel de estadísticas avanzado para administradores.
 
 ---
 
 ## ✍️ Autor
-**Nicolás R. W.** - Desarrollador Android enfocado en soluciones escalables y seguras.
+**Nicolás R. W.** - Desarrollador Android enfocado en crear soluciones tecnológicas con impacto real en la comunidad.
+
+---
+
+### ⚙️ Configuración rápida
+1. Clonar el repositorio.
+2. Añadir tu `google-services.json` en `/app`.
+3. Configurar tus llaves de Mercado Pago en `.env`.
+4. Build & Run en Android Studio.
