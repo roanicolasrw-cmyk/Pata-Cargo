@@ -37,10 +37,6 @@ Para asegurar que la aplicación sea mantenible y escale, se aplicaron principio
   <img src="assets/screenshots/Inicio sesion protegida.jpeg" width="23%" alt="Seguridad" />
 </div>
 
-## 🎥 Video Demostración
-> [!IMPORTANT]
-> Puedes encontrar una demo en video del flujo completo en la carpeta `assets/video` (o [haz clic aquí si está disponible en línea]).
-
 ---
 
 ## 🧐 Decisiones Técnicas: ¿Por qué construí esto así?
