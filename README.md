@@ -4,15 +4,30 @@
 
 ---
 
-## 💎 Valor Técnico y Arquitectura
+## 🏗️ Decisiones de arquitectura
 
-Este proyecto demuestra el dominio de estándares de desarrollo Android modernos y la resolución de problemas complejos:
+Este proyecto fue desarrollado aplicando estándares de la industria para garantizar escalabilidad y mantenimiento:
 
-*   **Arquitectura:** Clean Architecture con patrón **MVVM** (Model-View-ViewModel).
-*   **Offline-First:** Sincronización robusta entre **Firebase Firestore** y persistencia local con **Room**.
-*   **Seguridad Financiera:** Implementación de flujo **Escrow** (Garantía de pago) mediante el SDK de **Mercado Pago**, donde el dinero solo se libera tras la validación mutua.
-*   **Interacción Digital:** Sistema de auditoría mediante generación y escaneo de **Códigos QR** (ZXing) para certificar entregas.
-*   **UI/UX:** Interfaz 100% declarativa con **Jetpack Compose** y Material Design 3.
+*   **Arquitectura:** Implementación de **Clean Architecture** dividida en capas (Data, Domain, UI) con el patrón **MVVM** (Model-View-ViewModel) para una separación de responsabilidades clara.
+*   **Offline-First:** Sincronización robusta entre **Firebase Firestore** y persistencia local con **Room**, permitiendo que la app funcione sin conexión.
+*   **Seguridad Financiera:** Flujo de pagos tipo **Escrow** (Garantía) integrado con el SDK de **Mercado Pago**. El dinero se retiene de forma segura y solo se libera cuando ambas partes validan la entrega mediante códigos únicos.
+*   **Validación Digital:** Auditoría mediante generación y escaneo de **Códigos QR** (ZXing) para certificar cada etapa del envío.
+*   **UI Declarativa:** Interfaz moderna construida íntegramente con **Jetpack Compose** y Material Design 3.
+
+---
+
+## 🧐 Justificación Técnica
+
+### ¿Por qué Firestore + Room?
+Se optó por una arquitectura híbrida para garantizar la disponibilidad de los datos:
+*   **Firestore** actúa como la fuente de verdad en la nube, gestionando el tiempo real necesario para el *matching* de cargas y transportistas.
+*   **Room** funciona como caché local y base de datos persistente, asegurando que el usuario pueda consultar sus envíos activos o su historial incluso en zonas de baja cobertura (común en rutas regionales).
+
+### ¿Por qué Jetpack Compose?
+La elección de Compose sobre el sistema de Views tradicional se debe a:
+*   **Productividad:** Reducción drástica de código *boilerplate* y errores de estado.
+*   **Consistencia:** Facilita la creación de un sistema de diseño coherente (Atomic Design) que se adapta dinámicamente a diferentes tamaños de pantalla.
+*   **Rendimiento:** Animaciones más fluidas y una gestión de estado reactiva que se integra perfectamente con Kotlin Coroutines y Flow.
 
 ---
 
